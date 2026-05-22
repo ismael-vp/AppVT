@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import { useThreatStore } from '@/store/useThreatStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { Clock, ShieldAlert, CheckCircle, Trash2 } from 'lucide-react';
 
 export default function HistoryPanel() {
   const { history, clearHistory, setScanResult, setMode } = useThreatStore();
+  const { session } = useAuthStore();
   // Zustand persist hydration hydration fix
   const [mounted, setMounted] = useState(false);
 
@@ -14,7 +16,9 @@ export default function HistoryPanel() {
     setMounted(true);
   }, []);
 
-  if (!mounted || history.length === 0) return null;
+  // Solo mostrar el historial local temporal a usuarios NO registrados.
+  // Los usuarios registrados tienen su historial completo en la nube en el menú de perfil.
+  if (!mounted || history.length === 0 || session) return null;
 
   return (
     <div className="w-full max-w-5xl mx-auto mt-12 animate-in fade-in duration-500 pt-8 border-t border-[#333]">

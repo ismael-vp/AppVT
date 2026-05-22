@@ -2,10 +2,13 @@ import asyncio
 import logging
 from urllib.parse import urlparse
 
+from datetime import datetime, timezone
+
 from models.osint_models import (
     HeuristicResult,
     TyposquattingData,
     URLStructureResult,
+    WhoisData,
 )
 from services.scanners.typosquatting_scanner import TyposquattingScanner
 from services.scanners.url_structure_analyzer import URLStructureAnalyzer
@@ -52,7 +55,8 @@ class HeuristicScanner:
     async def run_full_heuristics(
         self,
         url: str,
-        hostname: str | None = None
+        hostname: str | None = None,
+        whois_data: WhoisData | None = None
     ) -> HeuristicResult:
         """Ejecuta todos los escáneres heurísticos y consolida el riesgo."""
         if not url or not isinstance(url, str):
@@ -107,6 +111,19 @@ class HeuristicScanner:
             base_score += penalty
             brand = typos_data.target_brand or "desconocida"
             flags.append(f"TYPOSQUATTING_DETECTED (marca: {brand}, penalización: +{penalty})")
+
+        if whois_data and whois_data.creation_date:
+            try:
+                creation_dt = datetime.fromisoformat(whois_data.creation_date)
+                if creation_dt.tzinfo is None:
+                    creation_dt = creation_dt.replace(tzinfo=timezone.utc)
+                now = datetime.now(timezone.utc)
+                age_days = (now - creation_dt).days
+                if age_days < 30:
+                    base_score += 15
+                    flags.append(f"RECENTLY_REGISTERED_DOMAIN ({age_days} days)")
+            except Exception as e:
+                logger.error(f"Error calculando edad del dominio: {e}")
 
         final_score = max(MIN_RISK_SCORE, min(base_score, MAX_RISK_SCORE))
         final_level = calculate_risk_level(final_score)

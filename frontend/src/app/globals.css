@@ -13,6 +13,11 @@ body {
   padding: 0;
 }
 
+/* Solución global para los cursores de botones */
+button, [role="button"], a {
+  cursor: pointer;
+}
+
 /* Custom Scrollbar for Dark Mode */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;

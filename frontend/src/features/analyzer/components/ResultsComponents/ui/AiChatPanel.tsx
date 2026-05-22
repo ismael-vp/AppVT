@@ -1,10 +1,7 @@
 import React from 'react';
 import { Send } from 'lucide-react';
 
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import { ChatMessage } from '@/store/useThreatStore';
 
 interface AiChatPanelProps {
   chatMessages: ChatMessage[];
@@ -12,6 +9,8 @@ interface AiChatPanelProps {
   setChatInput: (val: string) => void;
   isChatLoading: boolean;
   handleSendMessage: (e: React.FormEvent) => void;
+  handleClearChat?: () => void;
+  handleEditMessage?: (index: number) => void;
   placeholder?: string;
   emptyStateMessage?: string;
 }
@@ -22,20 +21,42 @@ export default function AiChatPanel({
   setChatInput,
   isChatLoading,
   handleSendMessage,
+  handleClearChat,
+  handleEditMessage,
   placeholder = "Pregunta algo a la IA...",
   emptyStateMessage = "Puedes hacer preguntas sobre los resultados del análisis."
 }: AiChatPanelProps) {
   return (
     <div className="bg-black border border-[#333] rounded-lg p-6">
-      <h3 className="text-[#ededed] text-xl font-medium mb-6">Pregunta a la IA</h3>
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="text-[#ededed] text-xl font-medium">Pregunta a la IA</h3>
+        {handleClearChat && chatMessages.length > 0 && (
+          <button
+            onClick={handleClearChat}
+            className="text-xs text-[#888] hover:text-[#ededed] transition-colors"
+          >
+            Limpiar Chat
+          </button>
+        )}
+      </div>
 
       {/* Historial de Mensajes */}
       <div className="space-y-6 mb-6 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
         {chatMessages.map((msg, idx) => (
           <div key={idx} className="flex flex-col space-y-1.5">
-            <span className="text-sm font-medium text-[#888]">
-              {msg.role === 'user' ? 'Tú' : 'IA'}
-            </span>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-[#888]">
+                {msg.role === 'user' ? 'Tú' : 'IA'}
+              </span>
+              {msg.role === 'user' && handleEditMessage && (
+                <button
+                  onClick={() => handleEditMessage(idx)}
+                  className="text-xs text-[#555] hover:text-[#ededed] transition-colors"
+                >
+                  Editar
+                </button>
+              )}
+            </div>
             <p className="text-base text-[#ededed] leading-relaxed whitespace-pre-wrap">
               {msg.content}
             </p>

@@ -7,7 +7,7 @@ import { Link, Search, X, Trash2, ScanLine } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 
 export default function AnalyzeForm() {
-  const { mode, setMode, setIsScanning, setScanResult, setError, isScanning, error } = useThreatStore();
+  const { mode, setMode, setIsScanning, setScanResult, setError, isScanning, scanResult } = useThreatStore();
   const [urlInput, setUrlInput] = useState('');
   const [imageInput, setImageInput] = useState<File | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('Iniciando análisis...');
@@ -15,7 +15,6 @@ export default function AnalyzeForm() {
   // 1. NUEVO ESTADO: Para guardar la URL segura de la imagen
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // 2. NUEVA REFERENCIA: Para cancelar peticiones HTTP duplicadas (Race Conditions)
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // --- EFECTO: Gestor de Memoria para la previsualización de imágenes (Fix Blob Leak) ---
@@ -26,18 +25,21 @@ export default function AnalyzeForm() {
       return;
     }
 
-    // Crea la URL temporal en la memoria del navegador
     const objectUrl = URL.createObjectURL(imageInput);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPreviewUrl(objectUrl);
 
-    // CLEANUP FUNCTION: Se ejecuta cuando imageInput cambia o el componente se desmonta.
-    // Esto libera la RAM del navegador inmediatamente.
     return () => {
       URL.revokeObjectURL(objectUrl);
     };
   }, [imageInput]);
 
+  // --- EFECTO: Sincronización del input con el historial ---
+  useEffect(() => {
+    if (scanResult && scanResult.type === 'url' && scanResult.resourceName) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setUrlInput(scanResult.resourceName);
+    }
+  }, [scanResult]);
 
   // --- EFECTO: Gestor de mensajes de carga ---
   useEffect(() => {
@@ -55,16 +57,81 @@ export default function AnalyzeForm() {
     return () => clearInterval(interval);
   }, [isScanning, mode]);
 
+  // --- COMPRESIÓN DE IMÁGENES CLIENT-SIDE ---
+  const handleImageSelection = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.src = objectUrl;
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX_WIDTH = 1200;
+      const MAX_HEIGHT = 1200;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height = Math.round((height *= MAX_WIDTH / width));
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width = Math.round((width *= MAX_HEIGHT / height));
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const compressedFile = new File([blob], file.name, {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+          setImageInput(compressedFile);
+        } else {
+          setImageInput(file);
+        }
+        URL.revokeObjectURL(objectUrl);
+      }, 'image/jpeg', 0.85);
+    };
+
+    img.onerror = () => {
+      setImageInput(file);
+      URL.revokeObjectURL(objectUrl);
+    };
+  };
+
+  // --- EFECTO: Escuchar evento Paste Global ---
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (mode !== 'image' || isScanning) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) handleImageSelection(file);
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [mode, isScanning]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 3. CANCELACIÓN DE PETICIONES (Fix Race Condition)
-    // Si ya había un escaneo en curso y el usuario lanza otro, cancelamos el anterior
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    // Instanciamos un nuevo controlador para esta petición
     abortControllerRef.current = new AbortController();
 
     setError(null);
@@ -79,7 +146,6 @@ export default function AnalyzeForm() {
           return;
         }
 
-        // Pasamos el signal del AbortController a Axios
         const response = await axios.post(`${API_URL}/api/analyze/url`,
           { url: urlInput },
           { signal: abortControllerRef.current.signal }
@@ -95,7 +161,6 @@ export default function AnalyzeForm() {
         const formData = new FormData();
         formData.append('file', imageInput);
 
-        // Pasamos el signal a la subida de imagen
         const response = await axios.post(`${API_URL}/api/analyze/image`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
           signal: abortControllerRef.current.signal
@@ -103,9 +168,7 @@ export default function AnalyzeForm() {
         setScanResult(response.data, imageInput.name);
       }
     } catch (err: unknown) {
-      // Manejamos el caso en que la petición fue cancelada intencionalmente
       if (axios.isCancel(err) || abortControllerRef.current?.signal.aborted) {
-        console.log("Petición anterior cancelada para evitar sobreescritura de datos.");
         return;
       }
 
@@ -113,9 +176,7 @@ export default function AnalyzeForm() {
         const detail = err.response.data.detail;
 
         const toUserMessage = (raw: string): string => {
-          // Eliminar el prefijo técnico que añade Pydantic v2
           const clean = raw.replace(/^Value error,\s*/i, '').trim();
-          // Normalizar mensajes técnicos de seguridad a texto amigable
           if (clean.toLowerCase().includes('ssrf') || clean.toLowerCase().includes('no es segura')) {
             return 'La URL introducida no es válida o no se puede analizar.';
           }
@@ -138,18 +199,14 @@ export default function AnalyzeForm() {
         setError('Error de conexión con el servidor. ¿Está el backend encendido?');
       }
     } finally {
-      // Fix Caos #4: solo desactivar el estado de carga si esta petición no ha sido abortada
-      // por una nueva petición que ya ha tomado el control.
       if (!abortControllerRef.current?.signal.aborted) {
         setIsScanning(false);
       }
     }
   };
 
-
   return (
     <div className="w-full max-w-5xl mx-auto bg-black border border-[#333] p-6 rounded-lg shadow-sm">
-      {/* Selector de Pestañas */}
       <div className="flex space-x-6 border-b border-[#333] mb-8">
         <button
           type="button"
@@ -178,7 +235,6 @@ export default function AnalyzeForm() {
         </button>
       </div>
 
-      {/* Formulario Principal */}
       <form onSubmit={handleSubmit} className="space-y-6">
         {mode === 'url' ? (
           <div className="space-y-2">
@@ -210,7 +266,6 @@ export default function AnalyzeForm() {
             </div>
           </div>
         ) : (
-          /* mode === 'image' */
           <div className="space-y-2">
             <label className="text-sm text-[#ededed] font-medium block">
               Captura de pantalla
@@ -225,7 +280,6 @@ export default function AnalyzeForm() {
               >
                 {previewUrl ? (
                   <div className="relative w-full h-full">
-                    {/* 4. USO DE LA URL SEGURA (El src apunta al estado, no genera la URL directamente) */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={previewUrl}

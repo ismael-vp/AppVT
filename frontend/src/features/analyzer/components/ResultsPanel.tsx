@@ -2,9 +2,11 @@
 
 import React, { useState } from 'react';
 import { useThreatStore } from '@/store/useThreatStore';
+import { useToastStore } from '@/store/useToast';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 import SummaryTab from './ResultsComponents/tabs/SummaryTab';
 import TechnicalTab from './ResultsComponents/tabs/TechnicalTab';
+import CommunityTab from './tabs/CommunityTab';
 import { ScanResult } from '@/types';
 import ScriptModal from './ResultsComponents/ui/ScriptModal';
 import { useAiChat } from '@/hooks/useAiChat';
@@ -13,16 +15,9 @@ import ImagePhishingPanel from './ResultsComponents/tabs/ImagePhishingPanel';
 
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
-function ResultsPanelInner() {
+function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
   const { scanResult, error, resetState } = useThreatStore();
-  const [activeTab, setActiveTab] = useState<'ai' | 'technical'>('ai');
-
-  // Asegurarnos de que no usamos los hooks si no hay scanResult, para que no dé error.
-  // Sin embargo, React Hooks deben ser llamados en el mismo orden siempre.
-  // Por lo que podemos llamar a los hooks y pasar un scanResult vacío o no llamarlos
-  // Wait, if scanResult is null, the early return handles it. But we cannot early return BEFORE hooks.
-  // We can provide a mock scanResult or just conditionally render a wrapper component?
-  // Let's check how to handle this correctly.
+  const [activeTab, setActiveTab] = useState<'ai' | 'technical' | 'community'>('ai');
 
   // Bug #3 fix: useAiChat siempre se llama (regla de hooks), pero nunca con null —
   // si scanResult es null pasamos un objeto vacío para que scan_context llegue como {}
@@ -48,7 +43,14 @@ function ResultsPanelInner() {
       <div className="w-full">
         <div className="flex justify-end mb-2 w-full max-w-5xl mx-auto">
           <button
-            onClick={() => { resetState(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onClick={() => {
+              if (isReadOnly) {
+                window.location.href = '/';
+              } else {
+                resetState();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }
+            }}
             className="flex items-center space-x-2 bg-[#050505] text-[#888] border border-[#333] hover:text-white hover:bg-[#111] transition-colors text-xs font-medium py-1.5 px-3 rounded-md"
           >
             <RotateCcw size={14} />
@@ -74,11 +76,36 @@ function ResultsPanelInner() {
   return (
     <div className="w-full max-w-5xl mx-auto mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700 relative">
 
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end mb-4 gap-3">
+        {!isReadOnly && (
+          <button
+            onClick={async () => {
+              try {
+                const id = await useThreatStore.getState().shareCurrentReport();
+                if (id) {
+                  const url = `${window.location.origin}/report/${id}`;
+                  await navigator.clipboard.writeText(url);
+                  useToastStore.getState().showToast('Enlace copiado al portapapeles', 'success');
+                }
+              } catch (err: unknown) {
+                useToastStore.getState().showToast(err instanceof Error ? err.message : 'Error al compartir enlace', 'error');
+              }
+            }}
+            className="flex items-center space-x-2 bg-indigo-600/10 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600/20 transition-colors text-xs font-medium py-1.5 px-3 rounded-md"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            <span>Compartir</span>
+          </button>
+        )}
+
         <button
           onClick={() => {
-            resetState();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (isReadOnly) {
+              window.location.href = '/';
+            } else {
+              resetState();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
           }}
           className="flex items-center space-x-2 bg-[#050505] text-[#888] border border-[#333] hover:text-white hover:bg-[#111] transition-colors text-xs font-medium py-1.5 px-3 rounded-md"
         >
@@ -87,15 +114,14 @@ function ResultsPanelInner() {
         </button>
       </div>
 
-
-      <div className="bg-black border border-[#333] rounded-lg overflow-hidden shadow-sm">
-        <div className="flex border-b border-zinc-900 bg-zinc-950/50 px-2 sm:px-6">
+      <div className="bg-black border border-[#333] rounded-lg overflow-hidden shadow-sm w-full">
+        <div className="flex border-b border-zinc-900 bg-zinc-950/50 px-6">
           <button
             onClick={() => setActiveTab('ai')}
             className={`py-4 px-4 sm:px-6 text-sm sm:text-base font-semibold flex items-center transition-all relative ${activeTab === 'ai' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             <span>Resumen</span>
-            {activeTab === 'ai' && <span className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white rounded-t-full"></span>}
+            {activeTab === 'ai' && <span className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white rounded-t-full animate-in fade-in duration-200"></span>}
           </button>
 
           <button
@@ -103,11 +129,19 @@ function ResultsPanelInner() {
             className={`py-4 px-4 sm:px-6 text-sm sm:text-base font-semibold flex items-center transition-all relative ${activeTab === 'technical' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
           >
             <span>Datos Técnicos</span>
-            {activeTab === 'technical' && <span className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white rounded-t-full"></span>}
+            {activeTab === 'technical' && <span className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white rounded-t-full animate-in fade-in duration-200"></span>}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('community')}
+            className={`py-4 px-4 sm:px-6 text-sm sm:text-base font-semibold flex items-center transition-all relative ${activeTab === 'community' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            <span>Comunidad</span>
+            {activeTab === 'community' && <span className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white rounded-t-full animate-in fade-in duration-200"></span>}
           </button>
         </div>
 
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
           {activeTab === 'ai' ? (
             <SummaryTab
               key={scanResult.resourceName}
@@ -117,13 +151,17 @@ function ResultsPanelInner() {
               setChatInput={aiChat.setChatInput}
               isChatLoading={aiChat.isChatLoading}
               handleSendMessage={aiChat.handleSendMessage}
+              handleClearChat={aiChat.handleClearChat}
+              handleEditMessage={aiChat.handleEditMessage}
             />
-          ) : (
+          ) : activeTab === 'technical' ? (
             <TechnicalTab
               scanResult={scanResult}
               isMalicious={isMalicious}
               onExplainScript={scriptAnalyzer.handleExplainScript}
             />
+          ) : (
+            <CommunityTab targetResource={scanResult.resourceName || ''} />
           )}
         </div>
       </div>
@@ -139,11 +177,11 @@ function ResultsPanelInner() {
   );
 }
 
-export default function ResultsPanel() {
+export default function ResultsPanel({ isReadOnly }: { isReadOnly?: boolean }) {
   return (
     <div id="results-panel-wrapper">
       <ErrorBoundary>
-        <ResultsPanelInner />
+        <ResultsPanelInner isReadOnly={isReadOnly} />
       </ErrorBoundary>
     </div>
   );

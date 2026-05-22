@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 MAX_URL_LENGTH = 2048
 ENTROPY_THRESHOLD = 0.85
 LEVENSHTEIN_THRESHOLD = 0.80
-MIN_WORD_LENGTH = 4
+MIN_WORD_LENGTH = 5
 
 SUSPICIOUS_KEYWORDS: list[tuple[str, int, str]] = [
     ("login", 15, "Login"),
@@ -58,6 +58,10 @@ ABUSED_FREE_HOSTING: list[tuple[str, int]] = [
     ("neocities.org", 20),
     ("tripod.com", 20),
     ("angelfire.com", 20),
+    ("s3.amazonaws.com", 20),
+    ("storage.googleapis.com", 20),
+    ("ipfs.io", 30),
+    ("bitbucket.io", 20),
 ]
 
 TARGET_BRANDS: list[tuple[str, set[str], set[str]]] = [
@@ -76,6 +80,13 @@ TARGET_BRANDS: list[tuple[str, set[str], set[str]]] = [
     ("barclays", {"co.uk"}, set()),
     ("santander", {"com", "co.uk", "es"}, set()),
     ("bbva", {"com", "es"}, set()),
+    ("coinbase", {"com"}, set()),
+    ("kraken", {"com"}, set()),
+    ("metamask", {"io"}, set()),
+    ("trustwallet", {"com"}, set()),
+    ("ledger", {"com"}, set()),
+    ("trezor", {"io"}, set()),
+    ("binance", {"com", "us"}, set()),
 ]
 
 # levenshtein_distance y _levenshtein_similarity se importan desde services.utils
@@ -139,8 +150,15 @@ def _detect_brand_impersonation(hostname: str, path: str) -> tuple[list[str], in
 
     for brand, official_tlds, official_subdomains in TARGET_BRANDS:
         brand_lower = brand.lower()
-        in_hostname = brand_lower in hostname_lower
-        in_path = brand_lower in path_lower
+        
+        # Evitar falsos positivos como "apple" dentro de "snapple.com"
+        in_hostname = (
+            brand_lower == extracted.domain or 
+            brand_lower in extracted.subdomain.split('.')
+        )
+        
+        # Evitar falsos positivos en el path buscando como palabra completa
+        in_path = bool(re.search(rf"\b{re.escape(brand_lower)}\b", path_lower))
 
         if not in_hostname and not in_path:
             continue

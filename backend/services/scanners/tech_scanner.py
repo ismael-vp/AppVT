@@ -47,6 +47,21 @@ TRACKER_PATTERNS: list[tuple[str, list[str]]] = [
     ("mouseflow.com", ["Cookies de Terceros", "Rastreo Publicitario"]),
     ("segment.com", ["Cookies de Terceros", "Rastreo Publicitario"]),
     ("mixpanel.com", ["Cookies de Terceros", "Rastreo Publicitario"]),
+    ("posthog.com", ["Cookies de Terceros", "Análisis de Comportamiento"]),
+    ("plausible.io", ["Cookies de Terceros", "Análisis de Comportamiento"]),
+    ("matomo", ["Cookies de Terceros", "Análisis de Comportamiento"]),
+    ("hubspot.com", ["Cookies de Terceros", "Rastreo de Marketing"]),
+    ("marketo.com", ["Cookies de Terceros", "Rastreo de Marketing"]),
+    ("amplitude.com", ["Cookies de Terceros", "Análisis de Comportamiento"]),
+    ("appsflyer.com", ["Cookies de Terceros", "Análisis de Comportamiento"]),
+]
+
+CMP_PATTERNS: list[tuple[str, str]] = [
+    ("onetrust", "Plataforma de Consentimiento (CMP)"),
+    ("cookiebot", "Plataforma de Consentimiento (CMP)"),
+    ("didomi", "Plataforma de Consentimiento (CMP)"),
+    ("trustarc", "Plataforma de Consentimiento (CMP)"),
+    ("quantcast", "Plataforma de Consentimiento (CMP)"),
 ]
 
 STORAGE_PATTERNS: list[tuple[str, str]] = [
@@ -63,6 +78,10 @@ DATA_LINKED_REGEX: list[tuple[re.Pattern, str]] = [
     (re.compile(r'''name=["']email["']''', re.I), "Correo Electrónico"),
     (re.compile(r'''type=["']tel["']''', re.I), "Número de Teléfono"),
     (re.compile(r'''name=["'](phone|tel)["']''', re.I), "Número de Teléfono"),
+    (re.compile(r'''type=["']password["']''', re.I), "Contraseñas / Credenciales"),
+    (re.compile(r'''name=["'](password|pass|pwd)["']''', re.I), "Contraseñas / Credenciales"),
+    (re.compile(r'''name=["'](cc_number|cvv|card|tarjeta)["']''', re.I), "Datos Financieros (Tarjetas)"),
+    (re.compile(r'''name=["'](address|zip|city|state|direccion)["']''', re.I), "Dirección Postal"),
 ]
 
 DATA_LINKED_SIMPLE: list[tuple[str, str]] = [
@@ -85,6 +104,7 @@ DEVICE_ACCESS_PATTERNS: list[tuple[str, str]] = [
     ("navigator.getbattery", "Estado de la Batería"),
     ("navigator.bluetooth", "Bluetooth"),
     ("navigator.usb", "Puertos USB"),
+    ("requestmidiaccess", "Dispositivos MIDI"),
 ]
 
 FINGERPRINTING_PATTERNS: list[tuple[str, str]] = [
@@ -94,6 +114,9 @@ FINGERPRINTING_PATTERNS: list[tuple[str, str]] = [
     ("webgl", "Huella Digital Gráfica (WebGL)"),
     ("rtcpeerconnection", "Fugas de Red (WebRTC)"),
     ("mozrtcpeerconnection", "Fugas de Red (WebRTC)"),
+    ("navigator.plugins", "Huella Digital de Navegador (Plugins)"),
+    ("screen.width", "Huella Digital Gráfica (Resolución)"),
+    ("screen.colordepth", "Huella Digital Gráfica (Color Depth)"),
 ]
 
 async def _is_safe_url_async(url: str) -> bool:
@@ -119,6 +142,15 @@ def _analyze_privacy(html_lower: str, external_scripts: list[str]) -> PrivacyDat
                 trackers_count += 1
                 tracking_used.update(labels)
                 break
+
+    for pattern, labels in TRACKER_PATTERNS:
+        if pattern in html_lower and not any(l in tracking_used for l in labels):
+            trackers_count += 1
+            tracking_used.update(labels)
+
+    for pattern, label in CMP_PATTERNS:
+        if pattern in html_lower:
+            tracking_used.add(label)
 
     if trackers_count > 0:
         tracking_used.add("Análisis de Comportamiento")

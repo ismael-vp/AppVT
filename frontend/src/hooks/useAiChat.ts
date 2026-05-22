@@ -1,18 +1,20 @@
 import { useState, useRef } from 'react';
 import axios from 'axios';
-import { ChatMessage } from '@/features/analyzer/components/ResultsComponents/tabs/SummaryTab';
+import { useThreatStore, ChatMessage } from '@/store/useThreatStore';
 import { ScanResult } from '@/types';
 import { API_URL } from '@/lib/api';
 
 export function useAiChat(scanResult: ScanResult) {
   const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
-  // Bug #7 fix: ref guard para evitar doble envío en rápida sucesión (race condition)
   const isSubmittingRef = useRef(false);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const { chats, saveChat, clearChat } = useThreatStore();
+  const chatId = scanResult?.resourceName || 'default';
+  const chatMessages = chats[chatId] || [];
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!chatInput.trim() || isChatLoading || isSubmittingRef.current) return;
 
     isSubmittingRef.current = true;
@@ -20,12 +22,10 @@ export function useAiChat(scanResult: ScanResult) {
     const newMessage: ChatMessage = { role: 'user', content: chatInput.trim() };
     const updatedMessages = [...chatMessages, newMessage];
 
-    setChatMessages(updatedMessages);
+    saveChat(chatId, updatedMessages);
     setChatInput('');
     setIsChatLoading(true);
 
-    // Fix Caos #3: el backend tiene max_length=20 en messages.
-    // Recortamos al 18 más recientes para no romper el chat silenciosamente.
     const MAX_MESSAGES_TO_SEND = 18;
     const messagesToSend = updatedMessages.slice(-MAX_MESSAGES_TO_SEND);
 
@@ -36,15 +36,29 @@ export function useAiChat(scanResult: ScanResult) {
       });
 
       if (response.data.reply) {
-        setChatMessages(prev => [...prev, { role: 'assistant', content: response.data.reply }]);
+        saveChat(chatId, [...updatedMessages, { role: 'assistant', content: response.data.reply }]);
       } else {
-        setChatMessages(prev => [...prev, { role: 'assistant', content: "Lo siento, ocurrió un error procesando tu solicitud." }]);
+        saveChat(chatId, [...updatedMessages, { role: 'assistant', content: "Lo siento, ocurrió un error procesando tu solicitud." }]);
       }
     } catch {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: "Error de conexión con el servidor IA." }]);
+      saveChat(chatId, [...updatedMessages, { role: 'assistant', content: "Error de conexión con el servidor IA." }]);
     } finally {
       setIsChatLoading(false);
       isSubmittingRef.current = false;
+    }
+  };
+
+  const handleClearChat = () => {
+    clearChat(chatId);
+    setChatInput('');
+  };
+
+  const handleEditMessage = (index: number) => {
+    const msg = chatMessages[index];
+    if (msg && msg.role === 'user') {
+      setChatInput(msg.content);
+      const updatedMessages = chatMessages.slice(0, index);
+      saveChat(chatId, updatedMessages);
     }
   };
 
@@ -53,6 +67,8 @@ export function useAiChat(scanResult: ScanResult) {
     setChatInput,
     chatMessages,
     isChatLoading,
-    handleSendMessage
+    handleSendMessage,
+    handleClearChat,
+    handleEditMessage
   };
 }

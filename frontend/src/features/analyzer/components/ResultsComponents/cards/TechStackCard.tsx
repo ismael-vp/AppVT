@@ -8,8 +8,6 @@ interface TechStackCardProps {
 }
 
 const TechStackCard: React.FC<TechStackCardProps> = ({ 
-  // technologies no se está usando, se puede omitir o prefijar con un guion bajo
-  technologies: _technologies = [], 
   externalScripts = [],
   onExplainScript 
 }) => {

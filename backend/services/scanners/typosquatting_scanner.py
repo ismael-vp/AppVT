@@ -89,6 +89,9 @@ def _detect_levenshtein_typos(domain: str) -> tuple[bool, str | None, float]:
     best_confidence = 0.0
 
     for brand in TARGET_BRANDS:
+        if len(brand) <= 3:
+            continue
+            
         if domain == brand:
             continue
 
@@ -128,6 +131,9 @@ def _detect_bitsquatting(domain: str) -> tuple[bool, str | None, float]:
 def _detect_prefix_suffix(domain: str) -> tuple[bool, str | None, float]:
     """Detecta si el dominio es una marca conocida con prefijo/sufijo sospechoso."""
     for brand in TARGET_BRANDS:
+        if len(brand) <= 3:
+            continue
+            
         if domain == brand:
             continue
 
@@ -156,6 +162,8 @@ def _detect_tld_swap(domain: str, original_tld: str) -> tuple[bool, str | None, 
         return False, None, 0.0
 
     for brand in TARGET_BRANDS:
+        if len(brand) <= 3:
+            continue
         if domain == brand:
             return True, brand, 0.70
 

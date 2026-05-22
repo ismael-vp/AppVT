@@ -155,6 +155,8 @@ export default function ImagePhishingPanel({ analysis, imageName }: ImagePhishin
         setChatInput={aiChat.setChatInput}
         isChatLoading={aiChat.isChatLoading}
         handleSendMessage={aiChat.handleSendMessage}
+        handleClearChat={aiChat.handleClearChat}
+        handleEditMessage={aiChat.handleEditMessage}
         placeholder="Ej. ¿Por qué se considera phishing esta imagen?"
         emptyStateMessage="Puedes preguntarme sobre los resultados del análisis de la imagen, las URLs detectadas o las señales de alerta encontradas."
       />

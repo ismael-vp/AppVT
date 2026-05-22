@@ -18,6 +18,8 @@ export const metadata: Metadata = {
 };
 
 import ServerStatus from "@/components/ui/ServerStatus";
+import { ClientAuthProvider } from "@/components/auth/ClientAuthProvider";
+import ToastContainer from "@/components/ui/ToastContainer";
 
 export default function RootLayout({
   children,
@@ -31,8 +33,11 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <ServerStatus />
-        {children}
+        <ClientAuthProvider>
+          <ServerStatus />
+          <ToastContainer />
+          {children}
+        </ClientAuthProvider>
       </body>
     </html>
   );

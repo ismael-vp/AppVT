@@ -443,3 +443,70 @@ class AIService:
                 status_code=500,
                 detail="Error interno al analizar el script con la IA."
             )
+
+    async def moderate_comment(self, content: str) -> dict:
+        """Modera un comentario usando IA para determinar si aporta valor."""
+        if not self.client:
+            raise HTTPException(
+                status_code=503,
+                detail="Servicio de IA no disponible."
+            )
+
+        content = _sanitize_untrusted_text(str(content))[:1000]
+
+        system_prompt = (
+            "Eres el moderador de una plataforma de ciberseguridad. "
+            "Tu tarea es evaluar un comentario de un usuario sobre un escaneo de seguridad de una web o archivo. "
+            "Un comentario APORTA VALOR si está relacionado con la seguridad, la página escaneada, si el usuario hace "
+            "una pregunta genuina sobre el resultado, si da una opinión sobre si cree que es seguro o no, o si comparte "
+            "su experiencia con esa web. No es necesario que sea altamente técnico.\n"
+            "Un comentario NO APORTA VALOR si es: spam obvio, insultos graves, publicidad, letras al azar (ej: 'asdfg'), "
+            "o saludos completamente fuera de contexto que parecen bots (ej: 'hola muy buena pagina web para comprar zapatos').\n\n"
+            "REGLAS:\n"
+            "1. Responde ÚNICAMENTE con un JSON válido.\n"
+            "2. Estructura requerida: {\"is_valuable\": true/false, \"reason\": \"Explicación breve si fue rechazado\"}\n"
+            "3. Ante la duda o si es un comentario inofensivo de un humano sobre la web, is_valuable debe ser true."
+        )
+
+        user_prompt = (
+            "Evalúa este comentario:\n"
+            f"<untrusted_text>{content}</untrusted_text>"
+        )
+
+        try:
+            response = await _api_call_with_retry(
+                lambda: self.client.chat.completions.create(
+                    model=AI_MODEL,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    **({"response_format": _JSON_RESPONSE_FORMAT} if _JSON_RESPONSE_FORMAT else {}),
+                    temperature=0.1,
+                    max_tokens=150,
+                )
+            )
+
+            if not response.choices:
+                raise HTTPException(status_code=502, detail="La IA no generó respuesta.")
+
+            response_content = response.choices[0].message.content
+            if not response_content:
+                raise HTTPException(status_code=502, detail="La IA no generó respuesta.")
+            
+            try:
+                parsed = json.loads(response_content.strip())
+                return {
+                    "is_valuable": bool(parsed.get("is_valuable", True)),
+                    "reason": str(parsed.get("reason", "Procesado por IA"))
+                }
+            except json.JSONDecodeError:
+                logger.warning(f"Error parseando JSON en moderación: {response_content}")
+                return {"is_valuable": True, "reason": "Aprobado por defecto (Error JSON)"}
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error(f"Error en moderate_comment: {exc}", exc_info=True)
+            # En caso de error técnico, aprobamos por defecto para no bloquear la plataforma
+            return {"is_valuable": True, "reason": "Aprobado por fallo de conexión IA"}

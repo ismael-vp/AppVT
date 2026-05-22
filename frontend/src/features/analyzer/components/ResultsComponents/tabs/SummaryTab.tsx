@@ -11,10 +11,7 @@ import SeverityBanner from '@/features/analyzer/components/ResultsComponents/ui/
 import AiChatPanel from '@/features/analyzer/components/ResultsComponents/ui/AiChatPanel';
 import SecureCaptureCard from '@/features/analyzer/components/ResultsComponents/cards/SecureCaptureCard';
 
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import { ChatMessage } from '@/store/useThreatStore';
 
 interface SummaryTabProps {
   scanResult: ScanResult;
@@ -22,7 +19,9 @@ interface SummaryTabProps {
   chatInput: string;
   setChatInput: (val: string) => void;
   isChatLoading: boolean;
-  handleSendMessage: (e: React.FormEvent) => void;
+  handleSendMessage: (e?: React.FormEvent) => void;
+  handleClearChat?: () => void;
+  handleEditMessage?: (index: number) => void;
 }
 
 export default function SummaryTab({
@@ -31,7 +30,9 @@ export default function SummaryTab({
   chatInput,
   setChatInput,
   isChatLoading,
-  handleSendMessage
+  handleSendMessage,
+  handleClearChat,
+  handleEditMessage
 }: SummaryTabProps) {
   const { ai_summary, osint_data, type } = scanResult;
 
@@ -147,15 +148,19 @@ export default function SummaryTab({
       )}
 
       {/* Chat Contextual Integrado */}
-      <AiChatPanel
-        chatMessages={chatMessages}
-        chatInput={chatInput}
-        setChatInput={setChatInput}
-        isChatLoading={isChatLoading}
-        handleSendMessage={handleSendMessage}
-        placeholder="Ej. ¿Qué significa que haya devuelto timeout?"
-        emptyStateMessage="Puedes pedirle aclaraciones técnicas sobre el reporte."
-      />
+      <div className="print:hidden">
+        <AiChatPanel
+          chatMessages={chatMessages}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+          isChatLoading={isChatLoading}
+          handleSendMessage={handleSendMessage}
+          handleClearChat={handleClearChat}
+          handleEditMessage={handleEditMessage}
+          placeholder="Ej. ¿Qué significa que haya devuelto timeout?"
+          emptyStateMessage="Puedes pedirle aclaraciones técnicas sobre el reporte."
+        />
+      </div>
 
     </div>
   );

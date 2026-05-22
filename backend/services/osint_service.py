@@ -85,7 +85,9 @@ class OSINTService:
 
         try:
             heuristic_orchestrator = HeuristicScanner()
-            heuristic_result = await heuristic_orchestrator.run_full_heuristics(url, hostname)
+            heuristic_result = await heuristic_orchestrator.run_full_heuristics(
+                url, hostname, whois_data=osint_data.whois
+            )
             osint_data.heuristic_result = heuristic_result
 
             if heuristic_result.url_anatomy:

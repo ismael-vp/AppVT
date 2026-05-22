@@ -199,7 +199,7 @@ def validate_url_safety(url: str) -> str:
     return url
 
 class URLRequest(BaseModel):
-    url: str = Field(..., min_length=1, description="URL a analizar")
+    url: str = Field(..., min_length=1, max_length=2048, description="URL a analizar")
 
     @field_validator("url")
     @classmethod
@@ -475,3 +475,22 @@ async def clear_cache():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="No se pudo eliminar la caché."
         )
+
+class ModerateCommentRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=1000)
+
+@router.post(
+    "/moderate-comment",
+    dependencies=[Depends(rate_limit_dependency)]
+)
+async def moderate_comment_endpoint(request: ModerateCommentRequest = Body(...)):
+    """Evalúa si un comentario aporta valor técnico o es irrelevante."""
+    try:
+        result = await ai_service.moderate_comment(request.content)
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error no controlado en moderate_comment_endpoint: {exc}", exc_info=True)
+        # Fallback tolerante a fallos
+        return {"is_valuable": True, "reason": "Aprobado por fallback de seguridad"}

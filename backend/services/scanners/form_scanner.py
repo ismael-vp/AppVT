@@ -188,12 +188,13 @@ class FormScanner:
                     result.reason = "Envío de datos sensibles por HTTP sin cifrar."
                     return result
 
-                if _is_external_action(action, hostname):
+            if _is_external_action(action, hostname):
+                if has_password:
                     result.has_dangerous_form = True
-                    result.reason = "Envío de datos sensibles a un servidor externo."
+                    result.reason = "Envío de contraseña a un servidor externo."
                     return result
 
-                if method == "get" and has_password:
+            if method == "get" and has_password:
                     result.has_dangerous_form = True
                     result.reason = "Envío de contraseñas mediante GET."
                     return result

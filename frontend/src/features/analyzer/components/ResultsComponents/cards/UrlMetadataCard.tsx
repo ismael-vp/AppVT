@@ -1,5 +1,6 @@
 import React from 'react';
 import { OSINTData } from '@/types';
+import { useToastStore } from '@/store/useToast';
 
 const getFlagEmoji = (countryCode?: string) => {
   if (!countryCode) return '';
@@ -34,7 +35,7 @@ export default function UrlMetadataCard({ resourceName, isMalicious, osintData }
                 if (resourceName) {
                   const defanged = resourceName.replace(/http/gi, 'hxxp').replace(/\./g, '[.]');
                   navigator.clipboard.writeText(defanged);
-                  alert("URL segura copiada al portapapeles: " + defanged);
+                  useToastStore.getState().showToast("URL segura copiada al portapapeles", "success");
                 }
               }}
               className="text-xs uppercase font-bold px-3 py-1.5 bg-[#111] hover:bg-[#222] text-[#ededed] rounded transition-colors border border-[#333]"

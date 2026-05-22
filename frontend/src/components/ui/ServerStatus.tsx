@@ -47,7 +47,7 @@ export default function ServerStatus() {
 
   return (
     <div
-      className="fixed top-5 right-6 flex h-2 w-2 items-center justify-center z-50"
+      className="fixed top-5 right-6 flex h-2 w-2 items-center justify-center z-50 print:hidden"
       title={label[status]}
       aria-label={label[status]}
     >

@@ -137,14 +137,43 @@ def _ensure_tesseract():
         )
 
 def _extract_text_from_image_sync(image_bytes: bytes) -> str:
-    """Versión síncrona de OCR (ejecutada en thread)."""
+    """Versión síncrona de OCR (ejecutada en thread) con detección de QR y redimensionado."""
     _ensure_tesseract()
     import pytesseract
     from PIL import Image
 
+    # 1. Cargar imagen
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+    # 2. Detección de Códigos QR (Quishing)
+    qr_text_found = ""
+    try:
+        from pyzbar.pyzbar import decode
+        decoded_objects = decode(img)
+        for obj in decoded_objects:
+            qr_data = obj.data.decode('utf-8')
+            if qr_data:
+                qr_text_found += f"\\n[CODIGO_QR_DETECTADO: {qr_data}]\\n"
+                logger.info(f"QR detectado en imagen: {qr_data}")
+    except Exception as e:
+        logger.warning(f"Error al leer QR con pyzbar (posible falta de DLLs): {e}")
+
+    # 3. Optimización: Redimensionar imagen para acelerar OCR (Max 1600px)
+    max_dimension = 1600
+    width, height = img.size
+    if width > max_dimension or height > max_dimension:
+        if width > height:
+            new_width = max_dimension
+            new_height = int(height * (max_dimension / width))
+        else:
+            new_height = max_dimension
+            new_width = int(width * (max_dimension / height))
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+    # 4. OCR
     text = pytesseract.image_to_string(img, config=TESSERACT_CONFIG)
-    return text.strip()
+    
+    return f"{text}\n{qr_text_found}".strip()
 
 async def _api_call_with_retry(callable, max_retries: int = MAX_RETRIES):
     """Ejecuta llamada a API de IA con retry."""
