@@ -27,20 +27,16 @@ VT_RATE_LIMIT_WINDOW = int(os.getenv("VT_RATE_LIMIT_WINDOW", "60"))
 # RATE LIMITING POR TOKEN/IP (memoria local; usar Redis en multi-worker)
 # =============================================================================
 
-_vt_rate_limit_store: dict[str, list[float]] = {}
-
+from utils.cache_service import CacheService
 
 def _check_vt_rate_limit(identifier: str) -> bool:
-    """Verifica si una petición a VT está dentro del límite permitido."""
-    now = time.time()
-    window = _vt_rate_limit_store.get(identifier, [])
-    window = [t for t in window if now - t < VT_RATE_LIMIT_WINDOW]
-    if len(window) >= VT_RATE_LIMIT_REQUESTS:
-        _vt_rate_limit_store[identifier] = window
-        return False
-    window.append(now)
-    _vt_rate_limit_store[identifier] = window
-    return True
+    """Verifica si una petición a VT está dentro del límite permitido usando Redis/Caché."""
+    cache = CacheService()
+    return cache.check_rate_limit(
+        f"vt_rate_limit_{identifier}",
+        VT_RATE_LIMIT_REQUESTS,
+        VT_RATE_LIMIT_WINDOW
+    )
 
 
 # =============================================================================
@@ -102,7 +98,7 @@ class VirusTotalService:
         if cls._client is None or cls._client.is_closed:
             cls._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(VT_TIMEOUT, connect=5.0),
-                limits=httpx.Limits(max_keepalive_connections=3, max_connections=5),
+                limits=httpx.Limits(max_keepalive_connections=15, max_connections=30),
                 follow_redirects=False,
             )
         return cls._client

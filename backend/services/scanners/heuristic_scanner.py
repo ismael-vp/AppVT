@@ -56,7 +56,7 @@ class HeuristicScanner:
         self,
         url: str,
         hostname: str | None = None,
-        whois_data: WhoisData | None = None
+        osint_data: Any = None
     ) -> HeuristicResult:
         """Ejecuta todos los escáneres heurísticos y consolida el riesgo."""
         if not url or not isinstance(url, str):
@@ -112,6 +112,7 @@ class HeuristicScanner:
             brand = typos_data.target_brand or "desconocida"
             flags.append(f"TYPOSQUATTING_DETECTED (marca: {brand}, penalización: +{penalty})")
 
+        whois_data = osint_data.whois if osint_data else None
         if whois_data and whois_data.creation_date:
             try:
                 creation_dt = datetime.fromisoformat(whois_data.creation_date)
@@ -124,6 +125,41 @@ class HeuristicScanner:
                     flags.append(f"RECENTLY_REGISTERED_DOMAIN ({age_days} days)")
             except Exception as e:
                 logger.error(f"Error calculando edad del dominio: {e}")
+
+        if osint_data and osint_data.tech_data:
+            if osint_data.tech_data.is_obfuscated_js:
+                base_score += 30
+                flags.append("OBFUSCATED_JS_DETECTED")
+            if osint_data.tech_data.anti_bot_detected:
+                base_score += 25
+                flags.append("ANTI_BOT_EVASION_DETECTED")
+            
+            if osint_data.tech_data.ocr_extracted_brands:
+                html_lower = osint_data.tech_data.html_content.lower() if osint_data.tech_data.html_content else ""
+                has_login_indicators = "password" in html_lower or 'type="password"' in html_lower or "<form" in html_lower
+
+                for brand in osint_data.tech_data.ocr_extracted_brands:
+                    if brand not in extracted_hostname:
+                        if has_login_indicators:
+                            base_score += 30
+                            flags.append(f"BRAND_IMPERSONATION_VIA_OCR ({brand})")
+                        else:
+                            base_score += 10
+                            flags.append(f"BRAND_MENTION_VIA_OCR ({brand})")
+
+        if osint_data and osint_data.ssl:
+            if osint_data.ssl.is_suspicious:
+                base_score += 20
+                if osint_data.ssl.cipher_suite:
+                    flags.append(f"SUSPICIOUS_SSL ({osint_data.ssl.cipher_suite})")
+                else:
+                    flags.append("SUSPICIOUS_SSL")
+
+        if osint_data and osint_data.geolocation and osint_data.geolocation.asn:
+            suspicious_asns = ["AS20473", "AS16276", "AS14061", "AS4134", "AS4837", "AS5089", "AS206446"]
+            if any(asn in osint_data.geolocation.asn for asn in suspicious_asns):
+                base_score += 30
+                flags.append(f"SUSPICIOUS_ASN ({osint_data.geolocation.asn})")
 
         final_score = max(MIN_RISK_SCORE, min(base_score, MAX_RISK_SCORE))
         final_level = calculate_risk_level(final_score)

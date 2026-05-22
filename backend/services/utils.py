@@ -34,7 +34,8 @@ TARGET_BRANDS = _load_list_from_env("TARGET_BRANDS", [
     "outlook", "gmail", "twitter", "x", "chase", "wellsfargo", "bankofamerica",
     "citibank", "hsbc", "mastercard", "visa", "amex", "discover", "spotify",
     "tiktok", "snapchat", "telegram", "whatsapp",
-    "coinbase", "kraken", "metamask", "trustwallet", "ledger", "trezor"
+    "coinbase", "kraken", "metamask", "trustwallet", "ledger", "trezor",
+    "dropbox", "dhl", "fedex", "adobe", "roblox", "steam", "discord", "epicgames"
 ])
 
 ABUSED_FREE_HOSTING = _load_list_from_env("ABUSED_FREE_HOSTING", [
@@ -44,6 +45,20 @@ ABUSED_FREE_HOSTING = _load_list_from_env("ABUSED_FREE_HOSTING", [
     "wixsite.com", "wordpress.com", "surge.sh", "neocities.org", "duckdns.org",
     "ngrok.io", "serveo.net", "localtunnel.me", "trycloudflare.com", "pagekite.me",
     "s3.amazonaws.com", "storage.googleapis.com", "ipfs.io", "bitbucket.io"
+])
+
+LEGITIMATE_DOMAINS = _load_list_from_env("LEGITIMATE_DOMAINS", [
+    "google.com", "google.es", "google.co.uk", "google.com.mx", "google.ca",
+    "amazon.com", "amazon.es", "amazon.co.uk", "amazon.de", "amazon.fr",
+    "microsoft.com", "microsoft.es", "office.com", "live.com",
+    "apple.com", "apple.es", "icloud.com",
+    "netflix.com", "netflix.es",
+    "paypal.com", "paypal.es",
+    "facebook.com", "facebook.es",
+    "instagram.com",
+    "linkedin.com",
+    "twitter.com", "x.com",
+    "github.com", "youtube.com", "yahoo.com"
 ])
 
 DANGEROUS_EXTENSIONS: set[str] = {

@@ -130,7 +130,8 @@ class GeoScanner:
                         country=data.get("country", ""),
                         country_code=data.get("countryCode", ""),
                         city=data.get("city", ""),
-                        isp=data.get("isp", "")
+                        isp=data.get("isp", ""),
+                        asn=data.get("as", "")
                     )
         except Exception as exc:
             logger.error(f"Error en geolocalización para {validated_ip}: {exc}")

@@ -203,8 +203,18 @@ class CacheService:
 
         # Fallback a memoria local
         now = time.time()
+        
+        # Limpieza periódica suave (cada vez que el dict supera 10k elementos)
         if len(self._local_rl_store) > 10000:
-            self._local_rl_store.clear()
+            keys_to_delete = []
+            for ip, times in self._local_rl_store.items():
+                if not any(now - t < window_seconds for t in times):
+                    keys_to_delete.append(ip)
+            for k in keys_to_delete:
+                del self._local_rl_store[k]
+            # Fallback de seguridad extrema
+            if len(self._local_rl_store) > 20000:
+                self._local_rl_store.clear()
 
         window = self._local_rl_store.get(client_ip, [])
         window = [t for t in window if now - t < window_seconds]

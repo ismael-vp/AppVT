@@ -62,7 +62,7 @@ def _analyze_issuer(issuer_name: str | None) -> tuple[str | None, bool, bool]:
     # Bug #9 fix: usar palabras completas para "ca" y "root" para evitar
     # falsos positivos en issuers legítimos como "DigiCert Global CA"
     import re as _re
-    _SUSPICIOUS_EXACT = {"self-signed", "localhost", "example.com", "test", "dummy", "unknown", "none", ""}
+    _SUSPICIOUS_EXACT = {"self-signed", "localhost", "example.com", "test", "dummy", "unknown", "none"}
     _SUSPICIOUS_WORD  = {"ca", "root"}
     is_suspicious = (
         is_self_signed
@@ -76,7 +76,7 @@ def _analyze_issuer(issuer_name: str | None) -> tuple[str | None, bool, bool]:
 def _check_expiry(not_after_iso: str | None) -> tuple[bool, bool, int | None]:
     """Verifica el estado de expiración del certificado."""
     if not not_after_iso:
-        return True, True, None
+        return False, False, None
 
     try:
         expiry_dt = datetime.fromisoformat(not_after_iso)
@@ -110,15 +110,17 @@ class SSLScanner:
             context = ssl.create_default_context()
             with socket.create_connection((safe_hostname, 443), timeout=SSL_TIMEOUT) as sock:
                 with context.wrap_socket(sock, server_hostname=safe_hostname) as ssock:
-                    return ssock.getpeercert()
+                    return ssock.getpeercert(), ssock.cipher()
 
         try:
-            cert = await asyncio.to_thread(_fetch_cert)
+            res = await asyncio.to_thread(_fetch_cert)
+            cert, cipher = res if res else (None, None)
         except ssl.SSLError as exc:
             logger.info(f"Error SSL en {safe_hostname}: {exc}")
             return SSLData(
                 issuer=None,
                 expiration_date=None,
+                cipher_suite=None,
                 is_self_signed=True,
                 is_suspicious=True,
                 is_expired=True,
@@ -142,12 +144,23 @@ class SSLScanner:
             not_after_iso = _parse_ssl_date(not_after_raw)
             is_expired, is_expiring_soon, days_remaining = _check_expiry(not_after_iso)
 
+            cipher_name = cipher[0] if cipher else None
+            ssl_version = cipher[1] if cipher else None
+            cipher_suite_str = f"{ssl_version} - {cipher_name}" if cipher_name else None
+
             if is_expired or is_expiring_soon:
+                is_suspicious = True
+                
+            import re
+            if cipher_name and re.search(r"\b(RC4|3DES|DES|MD5)\b", cipher_name):
+                is_suspicious = True
+            if ssl_version and ssl_version in ("SSLv2", "SSLv3", "TLSv1", "TLSv1.1"):
                 is_suspicious = True
 
             return SSLData(
                 issuer=issuer_name,
                 expiration_date=not_after_iso,
+                cipher_suite=cipher_suite_str,
                 is_self_signed=is_self_signed,
                 is_suspicious=is_suspicious,
                 is_expired=is_expired,

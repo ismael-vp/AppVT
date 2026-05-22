@@ -86,7 +86,7 @@ class OSINTService:
         try:
             heuristic_orchestrator = HeuristicScanner()
             heuristic_result = await heuristic_orchestrator.run_full_heuristics(
-                url, hostname, whois_data=osint_data.whois
+                url, hostname, osint_data=osint_data
             )
             osint_data.heuristic_result = heuristic_result
 
@@ -117,13 +117,26 @@ class OSINTService:
         try:
             microlink_url = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&device=iPhone+13&userAgent={quote(ua_mobile)}"
 
-            async with httpx.AsyncClient(timeout=25.0) as client:
+            async with httpx.AsyncClient(timeout=12.0) as client:
                 response = await client.get(microlink_url)
                 if response.status_code == 200:
                     api_data = response.json().get("data", {})
                     shot_url = api_data.get("screenshot", {}).get("url")
                     if shot_url:
                         osint_data.screenshot_mobile = shot_url
+                        try:
+                            img_resp = await client.get(shot_url, timeout=8.0)
+                            if img_resp.status_code == 200:
+                                from services.image_phishing_service import ImagePhishingService
+                                ocr_svc = ImagePhishingService()
+                                ocr_text = await ocr_svc.extract_text_from_image(img_resp.content)
+                                if osint_data.tech_data:
+                                    from services.utils import TARGET_BRANDS
+                                    text_lower = ocr_text.lower()
+                                    ocr_brands = [b for b in TARGET_BRANDS if b in text_lower and len(b) > 3]
+                                    osint_data.tech_data.ocr_extracted_brands = list(set(ocr_brands))
+                        except Exception as exc:
+                            logger.error(f"Error en OCR de la captura: {exc}")
 
                     real_title = api_data.get("title", "").strip().lower()
                     if real_title and osint_data.tech_data and osint_data.tech_data.html_content:

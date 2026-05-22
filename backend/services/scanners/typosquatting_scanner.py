@@ -6,7 +6,7 @@ import logging
 import tldextract
 
 from models.osint_models import TyposquattingData
-from services.utils import TARGET_BRANDS, levenshtein_similarity
+from services.utils import TARGET_BRANDS, LEGITIMATE_DOMAINS, levenshtein_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +228,14 @@ class TyposquattingScanner:
 
         if len(main_domain) < MIN_DOMAIN_LENGTH:
             return None
+            
+        # Bypass for legitimate domains
+        if hostname in LEGITIMATE_DOMAINS:
+            return None
+            
+        for legit in LEGITIMATE_DOMAINS:
+            if hostname.endswith("." + legit):
+                return None
 
         detectors = [
             ("homoglyph", _detect_homoglyphs),

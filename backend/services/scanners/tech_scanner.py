@@ -223,14 +223,37 @@ class TechScanner:
         response_headers: dict[str, str],
         cookies_dict: dict[str, str],
         hostname: str
-    ) -> tuple[list[str], list[str], PrivacyData]:
+    ) -> tuple[list[str], list[str], PrivacyData, bool, bool]:
         """Análisis CPU-intensivo ejecutado en thread."""
         html_lower = html_content.lower()
         external_scripts = _extract_external_scripts(html_content, hostname)
         technologies: list[str] = []
         privacy = _analyze_privacy(html_lower, external_scripts)
 
-        return external_scripts, technologies, privacy
+        is_obfuscated = False
+        anti_bot = False
+        
+        # Detect obfuscation
+        obfuscation_patterns = [
+            r"eval\s*\(\s*atob\s*\(",
+            r"(?:\\x[0-9a-fA-F]{2}){5,}", 
+            r"var\s+_0x[0-9a-fA-F]+\s*=",
+            r"\[\s*['\"]\\x"
+        ]
+        if any(re.search(pat, html_content) for pat in obfuscation_patterns):
+            is_obfuscated = True
+            
+        # Detect anti-bot
+        anti_bot_patterns = [
+            r"navigator\.webdriver",
+            r"window\.screen\.colordepth\s*==\s*0",
+            r"phantomjs",
+            r"__nightmare"
+        ]
+        if any(re.search(pat, html_lower) for pat in anti_bot_patterns):
+            anti_bot = True
+
+        return external_scripts, technologies, privacy, is_obfuscated, anti_bot
 
     @staticmethod
     async def get_tech_and_scripts(url: str, hostname: str) -> TechData:
@@ -297,7 +320,7 @@ class TechScanner:
             result.html_content = html_content
 
         try:
-            external_scripts, technologies, privacy = await asyncio.to_thread(
+            external_scripts, technologies, privacy, is_obfuscated, anti_bot = await asyncio.to_thread(
                 TechScanner._cpu_bound_analysis,
                 html_content,
                 response_headers,
@@ -307,6 +330,8 @@ class TechScanner:
             result.external_scripts = external_scripts
             result.technologies = technologies
             result.privacy_analysis = privacy
+            result.is_obfuscated_js = is_obfuscated
+            result.anti_bot_detected = anti_bot
         except Exception as exc:
             logger.error(f"Error en análisis CPU-bound: {exc}")
 

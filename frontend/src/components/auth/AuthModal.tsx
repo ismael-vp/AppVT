@@ -19,7 +19,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [error, setError] = useState('');
   const [mounted, setMounted] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string>();
-  const [showTurnstile, setShowTurnstile] = useState(false);
   const turnstileRef = useRef<TurnstileInstance>(null);
 
   useEffect(() => {
@@ -27,16 +26,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setMounted(true);
   }, []);
 
-  // Controlar renderizado para animaciones de salida
-  useEffect(() => {
-    if (isOpen) {
-      const timer = setTimeout(() => setShowTurnstile(true), 350);
-      return () => clearTimeout(timer);
-    } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowTurnstile(false);
-    }
-  }, [isOpen]);
+  // Eliminar efecto de reset en isOpen para evitar error "Turnstile has not been loaded"
 
   // Cerrar al pulsar Escape
   useEffect(() => {
@@ -125,7 +115,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   //   }
   // };
 
-  if (!mounted) return null;
+  if (!mounted || typeof document === 'undefined') return null;
 
   return createPortal(
     <>
@@ -139,7 +129,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
       {/* Panel lateral derecho (Drawer) */}
       <div 
-        className={`fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-[#0a0a0a] border-l border-zinc-800/50 shadow-2xl transition-transform duration-300 ease-in-out flex flex-col ${
+        className={`fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-zinc-950 border-l border-zinc-800/50 shadow-2xl transition-transform duration-300 ease-in-out flex flex-col ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -150,6 +140,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             {isLogin ? 'Acceso al Sistema' : 'Nuevo Registro'}
           </h2>
           <button 
+            type="button"
             onClick={onClose}
             className="text-zinc-500 hover:text-zinc-300 transition-colors rounded-full p-1 hover:bg-zinc-800/50 active:scale-95"
             tabIndex={isOpen ? 0 : -1}
@@ -174,6 +165,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" size={16} />
                 <input 
                   type="email" 
+                  id="email-input"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -190,6 +182,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" size={16} />
                 <input 
                   type="password" 
+                  id="password-input"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -202,7 +195,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
             {/* Cloudflare Turnstile CAPTCHA */}
             <div className="flex justify-center pt-2 min-h-[65px]">
-              {showTurnstile && (
+              {isOpen && (
                 <Turnstile
                   ref={turnstileRef}
                   siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ''}
@@ -234,7 +227,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               tabIndex={isOpen ? 0 : -1}
             >
               {loading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
+                <div className="animate-spin rounded-full size-4 border-2 border-black border-t-transparent"></div>
               ) : (
                 <>
                   {isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}
@@ -246,10 +239,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Footer del Panel */}
-        <div className="px-6 py-4 border-t border-zinc-800/50 bg-[#0a0a0a] mt-auto">
+        <div className="px-6 py-4 border-t border-zinc-800/50 bg-zinc-950 mt-auto">
           <p className="text-center text-zinc-500 text-xs">
             {isLogin ? '¿No tienes acceso al sistema?' : '¿Ya eres un analista autorizado?'}
             <button 
+              type="button"
               onClick={() => setIsLogin(!isLogin)}
               className="ml-2 text-zinc-300 hover:text-white font-medium transition-colors border-b border-zinc-700 hover:border-zinc-400 pb-0.5"
               tabIndex={isOpen ? 0 : -1}

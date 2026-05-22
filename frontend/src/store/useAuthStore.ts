@@ -6,20 +6,25 @@ import { useThreatStore } from './useThreatStore';
 interface AuthState {
   session: Session | null;
   user: User | null;
+  isInitialized: boolean;
   setSession: (session: Session | null) => void;
   signOut: () => Promise<void>;
   initializeAuth: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   user: null,
+  isInitialized: false,
   setSession: (session) => set({ session, user: session?.user || null }),
   signOut: async () => {
     await supabase.auth.signOut();
     set({ session: null, user: null });
   },
   initializeAuth: () => {
+    if (get().isInitialized) return;
+    set({ isInitialized: true });
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       set({ session, user: session?.user || null });
       if (session?.user) {

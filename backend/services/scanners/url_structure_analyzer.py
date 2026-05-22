@@ -11,7 +11,7 @@ from services.utils import calculate_risk_level, levenshtein_similarity
 logger = logging.getLogger(__name__)
 
 MAX_URL_LENGTH = 2048
-ENTROPY_THRESHOLD = 0.85
+ENTROPY_THRESHOLD = 0.82
 LEVENSHTEIN_THRESHOLD = 0.80
 MIN_WORD_LENGTH = 5
 

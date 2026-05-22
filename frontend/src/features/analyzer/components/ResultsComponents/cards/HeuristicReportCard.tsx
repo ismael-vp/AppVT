@@ -51,8 +51,8 @@ export default function HeuristicReportCard({ result }: HeuristicReportCardProps
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <h4 className="text-zinc-100 text-xl font-semibold mb-4 flex items-center space-x-2">
-        <span>Análisis Estructural de URL</span>
+      <h4 className="text-zinc-100 text-xl font-semibold mb-4 flex items-center gap-2">
+        <span>Análisis Heurístico Avanzado</span>
       </h4>
 
 
@@ -61,7 +61,7 @@ export default function HeuristicReportCard({ result }: HeuristicReportCardProps
           <div className="flex items-center gap-4">
 
             <div className="relative flex items-center justify-center">
-              <svg className="w-16 h-16 transform -rotate-90">
+              <svg className="size-16 transform -rotate-90">
                 <circle
                   cx="32"
                   cy="32"
@@ -92,7 +92,7 @@ export default function HeuristicReportCard({ result }: HeuristicReportCardProps
                   Nivel {getLevelLabel(level)}
                 </span>
               </div>
-              <p className="text-xs text-zinc-400">Puntuación de riesgo estructural</p>
+              <p className="text-xs text-zinc-400">Puntuación de riesgo heurístico</p>
             </div>
           </div>
 
@@ -105,13 +105,13 @@ export default function HeuristicReportCard({ result }: HeuristicReportCardProps
             </p>
             <div className="flex flex-wrap gap-2">
               {flags.length > 0 ? (
-                flags.map((flag, idx) => (
-                  <span key={idx} className="text-[10px] bg-zinc-900 border border-zinc-800 text-zinc-300 px-2 py-1 rounded">
+                flags.map((flag) => (
+                  <span key={flag} className="text-[10px] bg-zinc-900 border border-zinc-800 text-zinc-300 px-2 py-1 rounded">
                     {flag}
                   </span>
                 ))
               ) : (
-                <span className="text-[10px] text-zinc-500 italic">No se detectaron anomalías estructurales significativas.</span>
+                <span className="text-[10px] text-zinc-500 italic">No se detectaron anomalías heurísticas significativas.</span>
               )}
             </div>
           </div>

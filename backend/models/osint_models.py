@@ -50,6 +50,7 @@ class GeolocationData(BaseModel):
     country_code: str = Field(..., max_length=5, description="Código ISO del país")
     city: str = Field(..., max_length=100)
     isp: str = Field(..., max_length=200, description="Proveedor de servicios de Internet")
+    asn: str | None = Field(None, max_length=100, description="Sistema Autónomo (ASN)")
 
     @field_validator("ip")
     @classmethod
@@ -80,6 +81,7 @@ class SSLData(BaseModel):
 
     issuer: str | None = Field(None, max_length=200)
     expiration_date: str | None = Field(None, description="Fecha ISO 8601")
+    cipher_suite: str | None = Field(None, max_length=100, description="Cifrado utilizado")
     is_self_signed: bool = Field(False, description="True si el certificado parece auto-firmado")
     is_suspicious: bool = Field(False, description="True si el issuer o estado del cert es sospechoso")
     is_expired: bool = Field(False, description="True si el certificado ya caducó")
@@ -155,6 +157,9 @@ class TechData(BaseModel):
     )
     privacy_analysis: PrivacyData | None = None
     is_mobile_optimized: bool = True
+    is_obfuscated_js: bool = False
+    anti_bot_detected: bool = False
+    ocr_extracted_brands: list[str] = Field(default_factory=list, max_length=50)
 
     @field_validator("external_scripts", "redirect_chain")
     @classmethod
