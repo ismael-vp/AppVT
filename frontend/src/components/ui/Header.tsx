@@ -17,7 +17,7 @@ export function Header() {
 
   const navLinks = [
     { name: 'Inicio', href: '/' },
-    { name: 'Análisis Masivo', href: '/bulk' },
+    { name: 'Análisis en Bloque', href: '/bulk' },
     { name: 'Clasificación', href: '/leaderboard' },
     { name: 'Estadísticas', href: '/dashboard' },
   ];

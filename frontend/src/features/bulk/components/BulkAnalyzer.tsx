@@ -11,14 +11,10 @@ import {
 
 
 const MAX_URLS = 50;
-// VirusTotal free tier: 4 req/min → 1 request cada 16 s para no pasarse
-const VT_DELAY_MS = 16000;
+// Pequeño retardo entre peticiones para no saturar nuestro propio servidor
+const SCAN_DELAY_MS = 1500;
 
-function getRiskFromScore(malicious: number): 'safe' | 'suspicious' | 'malicious' {
-  if (malicious > 5) return 'malicious';
-  if (malicious > 0) return 'suspicious';
-  return 'safe';
-}
+
 
 function getRiskStyle(label?: string) {
   if (label === 'malicious') return { color: 'text-red-400', bg: 'bg-red-500/10', icon: <XCircle size={13} /> };
@@ -79,10 +75,14 @@ export default function BulkAnalyzer() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const malicious = (data.stats?.malicious || 0) + (data.stats?.suspicious || 0);
-      const label = getRiskFromScore(malicious);
-      const score = malicious > 5 ? 85 : malicious > 0 ? Math.min(50 + malicious * 7, 95) : 5;
-      return { score, label };
+      const riskScore = data.osint_data?.heuristic_result?.risk_score || 0;
+      const level = data.osint_data?.heuristic_result?.level || 'LOW';
+      
+      let label: 'safe' | 'suspicious' | 'malicious' = 'safe';
+      if (level === 'CRITICAL' || level === 'HIGH') label = 'malicious';
+      else if (level === 'MEDIUM') label = 'suspicious';
+      
+      return { score: riskScore, label };
     } catch {
       return null;
     }
@@ -116,10 +116,10 @@ export default function BulkAnalyzer() {
     for (let i = 0; i < urls.length; i++) {
       if (abortRef.current) break;
 
-      // Pausa entre peticiones respetando el rate limit de VT (excepto la primera)
+      // Pausa entre peticiones respetando nuestro propio servidor
       if (i > 0) {
-        startCountdown(Math.ceil(VT_DELAY_MS / 1000), i - 1);
-        await sleep(VT_DELAY_MS);
+        startCountdown(Math.ceil(SCAN_DELAY_MS / 1000), i - 1);
+        await sleep(SCAN_DELAY_MS);
         if (abortRef.current) break;
         setCountdown(0);
       }
@@ -171,7 +171,7 @@ export default function BulkAnalyzer() {
   const done = results.filter(r => r.status === 'done' || r.status === 'error').length;
   const threats = results.filter(r => r.label === 'malicious' || r.label === 'suspicious').length;
   const progress = results.length > 0 ? Math.round((done / results.length) * 100) : 0;
-  const estimatedMinutes = urlCount > 1 ? Math.ceil(((urlCount - 1) * VT_DELAY_MS) / 60000) : 0;
+  const estimatedMinutes = urlCount > 1 ? Math.ceil(((urlCount - 1) * SCAN_DELAY_MS) / 60000) : 0;
 
   return (
     <div className="w-full max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -225,7 +225,7 @@ export default function BulkAnalyzer() {
                 disabled={urlCount === 0}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 text-white font-medium text-sm px-8 py-3 rounded-xl hover:bg-indigo-500 hover:shadow-[0_0_20px_rgba(79,70,229,0.3)] disabled:bg-zinc-900 disabled:text-zinc-600 disabled:shadow-none disabled:cursor-not-allowed transition-all active:scale-[0.98] border border-indigo-500/50 disabled:border-zinc-800"
               >
-                <Play size={14} className={urlCount === 0 ? "opacity-50" : ""} /> Iniciar análisis masivo
+                <Play size={14} className={urlCount === 0 ? "opacity-50" : ""} /> Iniciar análisis en bloque
               </button>
             </div>
           </div>
@@ -234,7 +234,7 @@ export default function BulkAnalyzer() {
           <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-zinc-900 bg-zinc-950/50 border border-zinc-800/50 rounded-xl overflow-hidden">
             {[
               { icon: <FileText size={16} />, title: `Límite de ${MAX_URLS}`, desc: 'Para garantizar rendimiento' },
-              { icon: <Clock size={16} />, title: '4 análisis/min', desc: 'Respetamos el límite de VirusTotal' },
+              { icon: <Clock size={16} />, title: 'Análisis OSINT', desc: 'Recolección nativa de inteligencia' },
               { icon: <Download size={16} />, title: 'Exportación', desc: 'Descarga un CSV al finalizar' },
             ].map(item => (
               <div key={item.title} className="p-5 flex items-start gap-4 hover:bg-zinc-900/20 transition-colors">
@@ -269,7 +269,7 @@ export default function BulkAnalyzer() {
                     <Clock size={14} />
                     <div>
                       <p className="text-lg font-mono text-zinc-300">{countdown}s</p>
-                      <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Límite VT</p>
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Espera</p>
                     </div>
                   </div>
                 )}
@@ -296,7 +296,7 @@ export default function BulkAnalyzer() {
               <div className="flex justify-between text-[11px] text-zinc-400 mb-1.5">
                 <span>
                   {running
-                    ? countdown > 0 ? `Esperando límite de VirusTotal (${countdown}s)…` : 'Analizando…'
+                    ? countdown > 0 ? `Esperando siguiente escaneo (${countdown}s)…` : 'Analizando…'
                     : done === results.length ? 'Análisis completado' : 'Detenido'}
                 </span>
                 <span>{progress}%</span>

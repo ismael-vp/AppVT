@@ -5,7 +5,10 @@ import re
 from urllib.parse import urlparse
 
 import httpx
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
+import warnings
+
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 from models.osint_models import PrivacyData, TechData
 from services.utils import is_safe_url

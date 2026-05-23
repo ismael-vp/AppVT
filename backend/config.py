@@ -27,7 +27,6 @@ class Settings(BaseSettings):
     # Secretos Obligatorios
     ADMIN_SECRET_KEY: str
     OPENAI_API_KEY: str
-    VT_API_KEY: str
 
     # Secretos Opcionales
     ABUSEIPDB_API_KEY: str | None = None

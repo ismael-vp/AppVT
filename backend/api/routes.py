@@ -22,13 +22,11 @@ from services.ai_service import AIService
 from services.image_phishing_service import ImagePhishingService
 from services.osint_service import OSINTService
 from services.utils import is_safe_url
-from services.virustotal_service import VirusTotalService
 from utils.cache_service import CacheService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-vt_service = VirusTotalService()
 ai_service = AIService()
 image_service = ImagePhishingService()
 cache_service = CacheService()
@@ -261,64 +259,87 @@ async def analyze_url(request: URLRequest = Body(...)):  # noqa: B008
                 cached_result["osint_data"]["redirect_chain"] = redirect_chain
             return cached_result
 
-        # Ejecución en paralelo (Concurrencia) usando la URL final
-        import asyncio
-        results = await asyncio.gather(
-            vt_service.get_url_report(final_url),
-            OSINTService.get_osint_data(final_url),
-            return_exceptions=True
-        )
-
-        vt_result, osint_result = results
-
-        has_errors = False
-
-        if isinstance(vt_result, Exception):
-            logger.warning(f"VirusTotal falló. Activando contingencia heurística. Error: {vt_result}")
-            vt_stats = {"malicious": 0, "suspicious": 0, "error": str(vt_result)}
-            has_errors = True
-        else:
-            vt_stats = vt_result
-
-        if isinstance(osint_result, Exception):
-            logger.error(f"OSINT falló críticamente: {osint_result}")
+        # Ejecución del motor OSINT y heurística local
+        try:
+            osint_result = await OSINTService.get_osint_data(final_url)
+            osint_data = osint_result
+            has_errors = False
+        except Exception as exc:
+            logger.error(f"OSINT falló críticamente: {exc}")
             osint_data = None
             has_errors = True
-        else:
-            osint_data = osint_result
 
-        # Bug #8 fix: copiar el dict antes de mutarlo (evita race condition en concurrencia)
-        vt_stats = dict(vt_stats)
+        # Simulamos vt_stats para mantener compatibilidad con el frontend
+        vt_stats = {"malicious": 0, "suspicious": 0, "harmless": 1, "undetected": 0, "timeout": 0}
 
-        # Heurística de Respaldo
-        if vt_stats.get("malicious", 0) == 0 and vt_stats.get("suspicious", 0) == 0:
-            is_suspicious_osint = False
-            heuristic_reasons = []
+        # Heurística OSINT
+        heuristic_reasons = []
+        malicious_score = 0
+        suspicious_score = 0
 
-            if getattr(osint_data, "is_typosquatting", False):
-                is_suspicious_osint = True
-                heuristic_reasons.append("Posible Typosquatting detectado")
+        # AbuseIPDB
+        abuse_score = getattr(osint_data, "abuse_confidence_score", None)
+        if abuse_score is not None and abuse_score > 0:
+            if abuse_score >= 50:
+                malicious_score += 1
+                heuristic_reasons.append(f"Alta probabilidad de abuso reportada ({abuse_score}% de confianza)")
+            elif abuse_score >= 10:
+                suspicious_score += 1
+                heuristic_reasons.append(f"Actividad sospechosa reportada ({abuse_score}% de confianza)")
 
-            if getattr(osint_data, "has_dangerous_form", False):
-                is_suspicious_osint = True
-                heuristic_reasons.append("Formulario de login sospechoso o redirección ofuscada")
+        if getattr(osint_data, "is_typosquatting", False):
+            malicious_score += 1
+            heuristic_reasons.append("Posible Typosquatting detectado")
 
-            if getattr(osint_data, "cloaking_detected", False):
-                is_suspicious_osint = True
-                heuristic_reasons.append("Detección de Cloaking (contenido engañoso para bots)")
+        if getattr(osint_data, "has_dangerous_form", False):
+            malicious_score += 1
+            heuristic_reasons.append("Formulario de login sospechoso o redirección ofuscada")
 
-            url_struct = getattr(osint_data, "url_structure", None)
-            if url_struct and getattr(url_struct, "risk_score", 0) >= 60:
-                is_suspicious_osint = True
-                heuristic_reasons.append(
-                    f"Estructura de URL maliciosa (Score: {url_struct.risk_score}/100)"
-                )
+        if getattr(osint_data, "cloaking_detected", False):
+            malicious_score += 1
+            heuristic_reasons.append("Detección de Cloaking (contenido engañoso para bots)")
 
-            if is_suspicious_osint:
-                vt_stats["suspicious"] = vt_stats.get("suspicious", 0) + 1
-                vt_stats["heuristic_flag"] = " | ".join(heuristic_reasons)
+        url_struct = getattr(osint_data, "url_structure", None)
+        if url_struct and getattr(url_struct, "risk_score", 0) >= 60:
+            suspicious_score += 1
+            heuristic_reasons.append(
+                f"Estructura de URL dudosa (Score: {url_struct.risk_score}/100)"
+            )
+        
+        # Verificamos si WHOIS marcó riesgo (dominio reciente < 30 días)
+        whois_data = getattr(osint_data, "whois", None)
+        if whois_data and getattr(whois_data, "creation_date", None):
+            from datetime import datetime, timezone
+            try:
+                creation_dt = datetime.fromisoformat(whois_data.creation_date.replace("Z", "+00:00"))
+                now = datetime.now(timezone.utc)
+                if (now - creation_dt).days < 30:
+                    suspicious_score += 1
+                    heuristic_reasons.append("Dominio de muy reciente creación (< 30 días)")
+            except Exception:
+                pass
+        
+        # Verificamos DNS (Ausencia de MX puede ser sospechoso en sitios de phishing)
+        dns_data = getattr(osint_data, "dns", None)
+        if dns_data and not getattr(dns_data, "has_mx", False):
+            if suspicious_score > 0 or malicious_score > 0:
+                suspicious_score += 1
+                heuristic_reasons.append("Dominio sin servidores de correo (MX) configurados")
+        
+        # Verificamos si SSL marcó riesgo
+        ssl_data = getattr(osint_data, "ssl", None)
+        if ssl_data and getattr(ssl_data, "is_suspicious", False):
+            suspicious_score += 1
+            heuristic_reasons.append("Certificado SSL dudoso o autofirmado")
 
-        ai_summary = await ai_service.generate_analysis_explanation(vt_stats, "url")
+        if malicious_score > 0 or suspicious_score > 0:
+            vt_stats["malicious"] = malicious_score
+            vt_stats["suspicious"] = suspicious_score
+            vt_stats["harmless"] = 0
+            vt_stats["heuristic_flag"] = " | ".join(heuristic_reasons)
+
+        # Usamos _serialize_osint para que contenga las @property y sea flat
+        ai_summary = await ai_service.generate_analysis_explanation(_serialize_osint(osint_data), "url")
 
         result = {
             "type": "url",

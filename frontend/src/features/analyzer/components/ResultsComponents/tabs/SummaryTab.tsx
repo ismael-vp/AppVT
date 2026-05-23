@@ -3,11 +3,8 @@ import React from 'react';
 import { ScanResult } from '@/types';
 import UrlAnatomyCard from '@/features/analyzer/components/ResultsComponents/cards/UrlAnatomyCard';
 import HeuristicRiskCard from '@/features/analyzer/components/ResultsComponents/cards/HeuristicRiskCard';
-import HeuristicReportCard from '@/features/analyzer/components/ResultsComponents/cards/HeuristicReportCard';
-import PrivacyNutritionLabel from '@/features/analyzer/components/ResultsComponents/cards/PrivacyNutritionLabel';
 
 import SecurityVerdict from '@/features/analyzer/components/ResultsComponents/ui/SecurityVerdict';
-import SeverityBanner from '@/features/analyzer/components/ResultsComponents/ui/SeverityBanner';
 import AiChatPanel from '@/features/analyzer/components/ResultsComponents/ui/AiChatPanel';
 import SecureCaptureCard from '@/features/analyzer/components/ResultsComponents/cards/SecureCaptureCard';
 
@@ -46,14 +43,6 @@ export default function SummaryTab({
       {/* Cabecera del Veredicto */}
       <div className="flex flex-col gap-4">
         <SecurityVerdict scanResult={scanResult} />
-
-        {scanResult.stats && (
-          <SeverityBanner 
-            isMalicious={(scanResult.stats?.malicious || 0) > 0 || (scanResult.stats?.suspicious || 0) > 0} 
-            maliciousCount={(scanResult.stats?.malicious || 0) + (scanResult.stats?.suspicious || 0)} 
-            totalEngines={(scanResult.stats?.malicious || 0) + (scanResult.stats?.suspicious || 0) + (scanResult.stats?.undetected || 0) + (scanResult.stats?.harmless || 0)} 
-          />
-        )}
       </div>
 
       {/* Bloque de Evidencias Técnicas */}
@@ -65,16 +54,6 @@ export default function SummaryTab({
           targetBrand={osint_data?.target_brand}
           hostname={scanResult.resourceName}
         />
-
-        {/* Nueva etiqueta de nutrición de privacidad (Apple Style) */}
-        {osint_data?.privacy_analysis && (
-          <PrivacyNutritionLabel privacy={osint_data.privacy_analysis} />
-        )}
-
-        {/* Análisis Heurístico Avanzado (Nueva Versión Facade) */}
-        {type === 'url' && osint_data?.heuristic_result && (
-          <HeuristicReportCard result={osint_data.heuristic_result} />
-        )}
 
         {/* Fallback para Análisis de Anatomía (Legacy) */}
         {type === 'url' && !osint_data?.heuristic_result && osint_data?.url_anatomy && (

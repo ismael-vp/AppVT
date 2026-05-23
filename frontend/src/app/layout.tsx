@@ -12,9 +12,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+import type { Viewport } from "next";
+export const viewport: Viewport = {
+  themeColor: "#000000",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export const metadata: Metadata = {
   title: "PhishingScanner",
   description: "Escanea enlaces sospechosos o imágenes en segundos con PhishingScanner",
+  appleWebApp: {
+    capable: true,
+    title: "PhishingScan",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 import ServerStatus from "@/components/ui/ServerStatus";

@@ -1,7 +1,6 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
 import { ScanResult } from '@/types';
-import AntivirusGrid from '@/features/analyzer/components/ResultsComponents/cards/AntivirusGrid';
 import TechStackCard from '@/features/analyzer/components/ResultsComponents/cards/TechStackCard';
 import UrlMetadataCard from '@/features/analyzer/components/ResultsComponents/cards/UrlMetadataCard';
 import type { ThreatMapProps } from '@/features/threat-map/components/ThreatMap';
@@ -28,7 +27,6 @@ interface TechnicalTabProps {
 
 export default function TechnicalTab({ scanResult, isMalicious, onExplainScript }: TechnicalTabProps) {
   const { type, osint_data, stats, resourceName } = scanResult;
-  const rawEngines = stats?.full_results || [];
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
@@ -66,8 +64,7 @@ export default function TechnicalTab({ scanResult, isMalicious, onExplainScript 
         />
       )}
 
-      {/* Desglose por Motor */}
-      <AntivirusGrid engines={rawEngines} heuristicFlag={stats?.heuristic_flag} />
+      {/* Fin de los componentes */}
 
     </div>
   );

@@ -28,15 +28,68 @@ def _load_list_from_env(env_var: str, default: list[str]) -> list[str]:
             logger.warning(f"{env_var} no es JSON válido.")
     return default
 
-TARGET_BRANDS = _load_list_from_env("TARGET_BRANDS", [
-    "google", "microsoft", "amazon", "netflix", "paypal", "apple", "facebook",
-    "instagram", "linkedin", "binance", "yahoo", "santander", "bbva", "caixabank",
-    "outlook", "gmail", "twitter", "x", "chase", "wellsfargo", "bankofamerica",
-    "citibank", "hsbc", "mastercard", "visa", "amex", "discover", "spotify",
-    "tiktok", "snapchat", "telegram", "whatsapp",
-    "coinbase", "kraken", "metamask", "trustwallet", "ledger", "trezor",
-    "dropbox", "dhl", "fedex", "adobe", "roblox", "steam", "discord", "epicgames"
-])
+def _load_dict_from_env(env_var: str, default: dict[str, str]) -> dict[str, str]:
+    """Carga un diccionario desde variable de entorno (JSON) o usa defaults."""
+    env_value = os.getenv(env_var, "").strip()
+    if env_value:
+        try:
+            parsed = json.loads(env_value)
+            if isinstance(parsed, dict):
+                return {str(k).lower().strip(): str(v).lower().strip() for k, v in parsed.items()}
+        except json.JSONDecodeError:
+            logger.warning(f"{env_var} no es JSON válido.")
+    return default
+
+TARGET_BRANDS = _load_dict_from_env("TARGET_BRANDS", {
+    "netflix": "netflix.com",
+    "amazon": "amazon.com",
+    "google": "google.com",
+    "facebook": "facebook.com",
+    "paypal": "paypal.com",
+    "dgt": "dgt.es",
+    "correos": "correos.es",
+    "microsoft": "microsoft.com",
+    "apple": "apple.com",
+    "instagram": "instagram.com",
+    "linkedin": "linkedin.com",
+    "binance": "binance.com",
+    "yahoo": "yahoo.com",
+    "santander": "bancosantander.es",
+    "bbva": "bbva.es",
+    "caixabank": "caixabank.es",
+    "outlook": "outlook.com",
+    "gmail": "gmail.com",
+    "twitter": "twitter.com",
+    "x": "x.com",
+    "chase": "chase.com",
+    "wellsfargo": "wellsfargo.com",
+    "bankofamerica": "bankofamerica.com",
+    "citibank": "citi.com",
+    "hsbc": "hsbc.com",
+    "mastercard": "mastercard.com",
+    "visa": "visa.com",
+    "amex": "americanexpress.com",
+    "discover": "discover.com",
+    "spotify": "spotify.com",
+    "tiktok": "tiktok.com",
+    "snapchat": "snapchat.com",
+    "telegram": "telegram.org",
+    "whatsapp": "whatsapp.com",
+    "coinbase": "coinbase.com",
+    "kraken": "kraken.com",
+    "metamask": "metamask.io",
+    "trustwallet": "trustwallet.com",
+    "ledger": "ledger.com",
+    "trezor": "trezor.io",
+    "dropbox": "dropbox.com",
+    "dhl": "dhl.com",
+    "fedex": "fedex.com",
+    "adobe": "adobe.com",
+    "roblox": "roblox.com",
+    "steam": "steampowered.com",
+    "discord": "discord.com",
+    "epicgames": "epicgames.com"
+})
 
 ABUSED_FREE_HOSTING = _load_list_from_env("ABUSED_FREE_HOSTING", [
     "github.io", "gitlab.io", "vercel.app", "netlify.app", "firebaseapp.com",

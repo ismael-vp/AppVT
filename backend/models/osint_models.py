@@ -64,6 +64,14 @@ class GeoScannerResult(BaseModel):
     abuse_confidence_score: int | None = Field(None, ge=0, le=100)
     total_reports: int | None = Field(None, ge=0)
 
+class DNSData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    a_records: list[str] = Field(default_factory=list)
+    txt_records: list[str] = Field(default_factory=list)
+    mx_records: list[str] = Field(default_factory=list)
+    has_mx: bool = Field(False, description="True si tiene registros MX (servidores de correo)")
+
 class WhoisData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -206,6 +214,7 @@ class OSINTResponse(BaseModel):
     total_reports: int | None = Field(None, ge=0)
     whois: WhoisData | None = None
     ssl: SSLData | None = None
+    dns: DNSData | None = None
     tech_data: TechData | None = None
     url_anatomy: UrlAnatomyData | None = None
     heuristic_result: HeuristicResult | None = None

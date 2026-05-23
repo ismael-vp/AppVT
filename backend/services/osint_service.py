@@ -13,6 +13,7 @@ from services.scanners.heuristic_scanner import HeuristicScanner
 from services.scanners.ssl_scanner import SSLScanner
 from services.scanners.tech_scanner import TechScanner
 from services.scanners.whois_scanner import WhoisScanner
+from services.scanners.dns_scanner import DNSScanner
 
 logger = logging.getLogger(__name__)
 
@@ -56,18 +57,19 @@ class OSINTService:
                     GeoScanner.get_geolocation_and_reputation(ip_address) if ip_address else _null_coro(),
                     WhoisScanner.get_whois(hostname),
                     SSLScanner.get_ssl_info(hostname),
+                    DNSScanner.get_dns_info(hostname),
                     TechScanner.get_tech_and_scripts(url, hostname),
                     return_exceptions=True
                 ),
                 timeout=12.0
             )
-            geo_data, whois_data, ssl_data, tech_data = results
+            geo_data, whois_data, ssl_data, dns_data, tech_data = results
         except asyncio.TimeoutError:
             logger.error(f"Timeout global de motores OSINT para {hostname}.")
-            geo_data = whois_data = ssl_data = tech_data = None
+            geo_data = whois_data = ssl_data = dns_data = tech_data = None
         except Exception as e:
             logger.error(f"Error en orquestación concurrente: {e}")
-            geo_data = whois_data = ssl_data = tech_data = None
+            geo_data = whois_data = ssl_data = dns_data = tech_data = None
 
         if geo_data and not isinstance(geo_data, Exception):
             osint_data.geolocation = geo_data.geolocation
@@ -80,8 +82,55 @@ class OSINTService:
         if ssl_data and not isinstance(ssl_data, Exception):
             osint_data.ssl = ssl_data
 
+        if dns_data and not isinstance(dns_data, Exception):
+            osint_data.dns = dns_data
+
         if tech_data and not isinstance(tech_data, Exception):
             osint_data.tech_data = tech_data
+
+        safe_url = url if url.startswith(('http://', 'https://')) else f"https://{url}"
+        encoded_url = quote(safe_url)
+        ua_desktop = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36"
+        ua_mobile = "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"
+
+        osint_data.screenshot_desktop = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&embed=screenshot.url&viewport.width=1920&viewport.height=1080&userAgent={quote(ua_desktop)}"
+
+        try:
+            microlink_url = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&device=iPhone+13&userAgent={quote(ua_mobile)}"
+
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                response = await client.get(microlink_url)
+                if response.status_code == 200:
+                    api_data = response.json().get("data", {})
+                    shot_url = api_data.get("screenshot", {}).get("url")
+                    if shot_url:
+                        osint_data.screenshot_mobile = shot_url
+                        try:
+                            img_resp = await client.get(shot_url, timeout=5.0)
+                            if img_resp.status_code == 200:
+                                from services.image_phishing_service import ImagePhishingService
+                                ocr_svc = ImagePhishingService()
+                                ocr_text = await ocr_svc.extract_text_from_image(img_resp.content)
+                                if osint_data.tech_data:
+                                    from services.utils import TARGET_BRANDS
+                                    text_lower = ocr_text.lower()
+                                    ocr_brands = [b for b in TARGET_BRANDS if b in text_lower and len(b) > 3]
+                                    osint_data.tech_data.ocr_extracted_brands = list(set(ocr_brands))
+                        except Exception as exc:
+                            logger.error(f"Error en OCR de la captura: {exc}")
+
+                    real_title = api_data.get("title", "").strip().lower()
+                    if real_title and osint_data.tech_data and osint_data.tech_data.html_content:
+                        bot_title = OSINTService._extract_title_fast(osint_data.tech_data.html_content)
+                        if bot_title and bot_title != real_title:
+                            osint_data.cloaking_detected = True
+                else:
+                    logger.warning(f"Microlink falló con status {response.status_code} para {url}")
+        except Exception as e:
+            logger.warning(f"Error en Microlink (Mobile render) para {url}: {type(e).__name__} - {str(e)}")
+
+        if not osint_data.screenshot_mobile:
+            osint_data.screenshot_mobile = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&embed=screenshot.url&device=iPhone+13"
 
         try:
             heuristic_orchestrator = HeuristicScanner()
@@ -106,50 +155,6 @@ class OSINTService:
                     osint_data.form_analysis = form_data
         except Exception as e:
             logger.error(f"Error en Heuristic Facade: {e}")
-
-        safe_url = url if url.startswith(('http://', 'https://')) else f"https://{url}"
-        encoded_url = quote(safe_url)
-        ua_desktop = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36"
-        ua_mobile = "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"
-
-        osint_data.screenshot_desktop = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&embed=screenshot.url&viewport.width=1920&viewport.height=1080&userAgent={quote(ua_desktop)}"
-
-        try:
-            microlink_url = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&device=iPhone+13&userAgent={quote(ua_mobile)}"
-
-            async with httpx.AsyncClient(timeout=12.0) as client:
-                response = await client.get(microlink_url)
-                if response.status_code == 200:
-                    api_data = response.json().get("data", {})
-                    shot_url = api_data.get("screenshot", {}).get("url")
-                    if shot_url:
-                        osint_data.screenshot_mobile = shot_url
-                        try:
-                            img_resp = await client.get(shot_url, timeout=8.0)
-                            if img_resp.status_code == 200:
-                                from services.image_phishing_service import ImagePhishingService
-                                ocr_svc = ImagePhishingService()
-                                ocr_text = await ocr_svc.extract_text_from_image(img_resp.content)
-                                if osint_data.tech_data:
-                                    from services.utils import TARGET_BRANDS
-                                    text_lower = ocr_text.lower()
-                                    ocr_brands = [b for b in TARGET_BRANDS if b in text_lower and len(b) > 3]
-                                    osint_data.tech_data.ocr_extracted_brands = list(set(ocr_brands))
-                        except Exception as exc:
-                            logger.error(f"Error en OCR de la captura: {exc}")
-
-                    real_title = api_data.get("title", "").strip().lower()
-                    if real_title and osint_data.tech_data and osint_data.tech_data.html_content:
-                        bot_title = OSINTService._extract_title_fast(osint_data.tech_data.html_content)
-                        if bot_title and bot_title != real_title:
-                            osint_data.cloaking_detected = True
-                else:
-                    logger.warning(f"Microlink falló con status {response.status_code} para {url}")
-        except Exception as e:
-            logger.warning(f"Error en Microlink (Mobile render) para {url}: {e}")
-
-        if not osint_data.screenshot_mobile:
-            osint_data.screenshot_mobile = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&embed=screenshot.url&device=iPhone+13"
 
         if osint_data.tech_data:
             osint_data.tech_data.html_content = ""

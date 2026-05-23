@@ -133,9 +133,9 @@ export default function LeaderboardContent() {
         <div className="px-6 py-4 border-b border-zinc-800">
           <h3 className="text-xs font-medium text-zinc-400 uppercase tracking-widest">Sistema de Insignias</h3>
         </div>
-        <div className="grid grid-cols-5 divide-x divide-zinc-900">
+        <div className="flex overflow-x-auto md:grid md:grid-cols-5 md:overflow-visible divide-x divide-zinc-900 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
           {BADGE_TIERS.map(b => (
-            <div key={b.label} className="flex flex-col items-center justify-center gap-2 py-6 px-2 text-center">
+            <div key={b.label} className="flex-none w-[120px] md:w-auto flex flex-col items-center justify-center gap-2 py-5 md:py-6 px-2 text-center">
               <span className={`text-[11px] px-2.5 py-0.5 rounded-full uppercase tracking-wider font-medium ${getBadgeStyle(b.label)}`}>
                 {b.label}
               </span>

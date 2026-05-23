@@ -9,7 +9,7 @@ interface ScannerLoaderProps {
 const URL_STEPS = [
   'Resolviendo DNS y conectando con el servidor',
   'Analizando estructura y riesgos de typosquatting',
-  'Consultando motores de inteligencia y reputación',
+  'Consultando indicadores OSINT y reputación',
   'Sintetizando veredicto final',
 ];
 

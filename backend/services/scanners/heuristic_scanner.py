@@ -136,14 +136,23 @@ class HeuristicScanner:
                 html_lower = osint_data.tech_data.html_content.lower() if osint_data.tech_data.html_content else ""
                 has_login_indicators = "password" in html_lower or 'type="password"' in html_lower or "<form" in html_lower
 
+                import tldextract
+                extracted = tldextract.extract(extracted_hostname)
+
                 for brand in osint_data.tech_data.ocr_extracted_brands:
-                    if brand not in extracted_hostname:
-                        if has_login_indicators:
-                            base_score += 30
-                            flags.append(f"BRAND_IMPERSONATION_VIA_OCR ({brand})")
-                        else:
-                            base_score += 10
-                            flags.append(f"BRAND_MENTION_VIA_OCR ({brand})")
+                    from services.utils import TARGET_BRANDS
+                    official_domain = TARGET_BRANDS.get(brand, brand)
+                    
+                    brand_lower = brand.lower()
+                    
+                    # Si el dominio base coincide exactamente con la marca (ej. google.es -> google)
+                    # asumimos que es una variante regional legítima y no suplantación.
+                    if extracted.domain == brand_lower:
+                        continue
+                    
+                    if official_domain not in extracted_hostname:
+                        base_score += 85
+                        flags.append(f"VISUAL_BRAND_IMPERSONATION (Marca detectada: {brand.capitalize()})")
 
         if osint_data and osint_data.ssl:
             if osint_data.ssl.is_suspicious:

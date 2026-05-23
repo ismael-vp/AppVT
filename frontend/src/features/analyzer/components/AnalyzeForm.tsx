@@ -83,7 +83,7 @@ function AnalyzeFormInner() {
   useEffect(() => {
     if (!isScanning) return;
     const messages = mode === 'url'
-      ? ['Analizando estructura...', 'Consultando motores...', 'Sintetizando veredicto...']
+      ? ['Analizando estructura...', 'Consultando indicadores...', 'Sintetizando veredicto...']
       : ['Extrayendo texto...', 'Analizando contenido...', 'Generando reporte...'];
 
     let i = 0;
@@ -380,7 +380,7 @@ function AnalyzeFormInner() {
               {loadingMessage}
             </p>
             <p className={`text-center text-xs text-zinc-500 absolute w-full transition-opacity ${!isScanning ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-              Impulsado por GPT-4o-mini y VirusTotal.
+              Introduce la URL para iniciar el análisis automático.
             </p>
           </div>
         </div>

@@ -215,8 +215,8 @@ class AIService:
                 logger.error("Cliente de IA no inicializado.")
         return self._client
 
-    async def generate_analysis_explanation(self, vt_stats: dict, resource_type: str) -> dict:
-        """Genera una explicación del análisis de VirusTotal usando IA."""
+    async def generate_analysis_explanation(self, osint_data: dict, resource_type: str) -> dict:
+        """Genera una explicación del análisis heurístico usando IA."""
         if not self.client:
             raise HTTPException(
                 status_code=503,
@@ -224,29 +224,18 @@ class AIService:
             )
 
         resource_type = _sanitize_untrusted_text(str(resource_type))[:50]
-        total_alerts = 0
-        total_engines = 0
-        safe_stats = {}
+        
+        # Filtramos contenido enorme como html_content para no saturar el prompt
+        safe_osint = {}
+        if isinstance(osint_data, dict):
+            safe_osint = {k: v for k, v in osint_data.items() if k not in ["html_content", "screenshot_desktop", "screenshot_mobile"]}
 
-        if isinstance(vt_stats, dict):
-            total_alerts = (
-                int(vt_stats.get("malicious", 0) or 0) +
-                int(vt_stats.get("suspicious", 0) or 0)
-            )
-            keys_to_sum = ["malicious", "suspicious", "undetected", "harmless", "timeout"]
-            total_engines = sum(
-                int(vt_stats.get(k, 0) or 0)
-                for k in keys_to_sum
-                if isinstance(vt_stats.get(k), (int, float, str))
-            )
-            safe_stats = {k: vt_stats.get(k) for k in keys_to_sum if k in vt_stats}
-
-        stats_str = _safe_json_dumps(safe_stats, MAX_VT_STATS_CHARS)
+        osint_str = _safe_json_dumps(safe_osint, MAX_VT_STATS_CHARS)
 
         system_prompt = (
-            "Eres un analista experto en ciberseguridad. Tu tarea es interpretar métricas de "
-            "detección de motores antivirus y explicar a un usuario sin conocimientos técnicos "
-            "avanzados si el recurso analizado es seguro o peligroso.\n\n"
+            "Eres un analista experto en ciberseguridad. Tu tarea es interpretar datos de "
+            "infraestructura (WHOIS, DNS, SSL) e indicadores heurísticos extraídos de una URL "
+            "y explicar a un usuario sin conocimientos técnicos avanzados si el recurso analizado es seguro o peligroso.\n\n"
             "REGLAS ESTRICTAS:\n"
             "1. Tu respuesta debe ser estrictamente un objeto JSON.\n"
             '2. El JSON debe tener exactamente esta estructura: '
@@ -257,13 +246,11 @@ class AIService:
         )
 
         user_prompt = (
-            "A continuación se presentan los datos del escaneo de seguridad. "
+            "A continuación se presentan los datos del escaneo heurístico de seguridad. "
             "Analízalos y genera el JSON solicitado.\n\n"
             f"Tipo de recurso escaneado: <untrusted_text>{resource_type}</untrusted_text>\n\n"
-            f"Total de motores con alertas: <untrusted_text>{total_alerts}</untrusted_text>\n"
-            f"Total de motores consultados: <untrusted_text>{total_engines}</untrusted_text>\n\n"
-            "Estadísticas completas de detección:\n"
-            f"<untrusted_text>{stats_str}</untrusted_text>"
+            "Datos extraídos del análisis (WHOIS, SSL, DNS, Heurística):\n"
+            f"<untrusted_text>{osint_str}</untrusted_text>"
         )
 
         try:
