@@ -1,14 +1,12 @@
 import asyncio
 import logging
-from urllib.parse import urlparse
-
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from models.osint_models import (
     HeuristicResult,
     TyposquattingData,
     URLStructureResult,
-    WhoisData,
 )
 from services.scanners.typosquatting_scanner import TyposquattingScanner
 from services.scanners.url_structure_analyzer import URLStructureAnalyzer
@@ -133,7 +131,7 @@ class HeuristicScanner:
             if osint_data.tech_data.anti_bot_detected:
                 base_score += 25
                 flags.append("ANTI_BOT_EVASION_DETECTED")
-            
+
             if osint_data.tech_data.ocr_extracted_brands:
                 html_lower = osint_data.tech_data.html_content.lower() if osint_data.tech_data.html_content else ""
                 has_login_indicators = "password" in html_lower or 'type="password"' in html_lower or "<form" in html_lower

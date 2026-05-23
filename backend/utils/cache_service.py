@@ -203,7 +203,7 @@ class CacheService:
 
         # Fallback a memoria local
         now = time.time()
-        
+
         # Limpieza periódica suave (cada vez que el dict supera 10k elementos)
         if len(self._local_rl_store) > 10000:
             keys_to_delete = []

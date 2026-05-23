@@ -2,12 +2,28 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import { X, Search, ShieldAlert, ShieldCheck, Clock, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useThreatStore } from '../../store/useThreatStore';
 import { useToastStore } from '@/store/useToast';
 import { ScanResult } from '@/types';
+
+function formatTimeAgo(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return 'Hace un momento';
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `Hace ${diffInMinutes} m`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `Hace ${diffInHours} h`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 30) return `Hace ${diffInDays} d`;
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 interface HistoryModalProps {
   isOpen: boolean;
@@ -27,6 +43,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
   const [loading, setLoading] = useState(true);
   const { session } = useAuthStore();
   const { showToast, showConfirm } = useToastStore();
+  const router = useRouter();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -40,7 +57,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
         .from('scan_reports')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(10);
 
       if (error) throw error;
       setReports(data || []);
@@ -152,7 +169,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
           <div className="flex items-center gap-2">
             <Clock size={18} className="text-zinc-400" />
             <h2 className="text-sm font-semibold text-zinc-100 tracking-wide uppercase">
-              Mis Escaneos
+              Recientes
             </h2>
           </div>
           <div className="flex items-center gap-2">
@@ -189,10 +206,10 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
           ) : reports.length === 0 ? (
             <div className="text-center mt-10">
               <div className="bg-zinc-900 inline-flex p-4 rounded-full mb-4">
-                <Search size={32} className="text-zinc-600" />
+                <Search size={32} className="text-zinc-500" />
               </div>
-              <p className="text-zinc-400 font-medium">No hay escaneos en tu historial</p>
-              <p className="text-zinc-600 text-sm mt-2">Tus análisis futuros aparecerán aquí.</p>
+              <p className="text-zinc-300 font-medium">No hay escaneos recientes</p>
+              <p className="text-zinc-500 text-sm mt-2">Tus análisis futuros aparecerán aquí.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -216,6 +233,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
                       setScanResult(report.scan_data, report.input_target);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                       onClose();
+                      router.push('/');
                     }}
                     className="group flex flex-col p-4 rounded-xl border border-zinc-800/50 bg-[#111] hover:bg-[#1a1a1a] hover:border-zinc-700 transition-all cursor-pointer relative"
                   >
@@ -228,11 +246,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
                           <p className="text-sm font-medium text-zinc-200 truncate" title={report.input_target}>
                             {report.input_target}
                           </p>
-                          <p className="text-xs text-zinc-500 mt-1">
-                            {new Date(report.created_at).toLocaleDateString(undefined, { 
-                              day: 'numeric', month: 'short', year: 'numeric',
-                              hour: '2-digit', minute: '2-digit'
-                            })}
+                          <p className="text-xs text-zinc-400 mt-1">
+                            {formatTimeAgo(report.created_at)}
                           </p>
                         </div>
                       </div>

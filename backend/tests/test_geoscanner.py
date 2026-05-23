@@ -1,5 +1,7 @@
 import pytest
+
 from services.scanners.geo_scanner import GeoScanner
+
 
 class TestGeoScannerValidation:
     def test_validate_public_ip_ipv4(self):

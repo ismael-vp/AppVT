@@ -150,13 +150,13 @@ def _detect_brand_impersonation(hostname: str, path: str) -> tuple[list[str], in
 
     for brand, official_tlds, official_subdomains in TARGET_BRANDS:
         brand_lower = brand.lower()
-        
+
         # Evitar falsos positivos como "apple" dentro de "snapple.com"
         in_hostname = (
-            brand_lower == extracted.domain or 
+            brand_lower == extracted.domain or
             brand_lower in extracted.subdomain.split('.')
         )
-        
+
         # Evitar falsos positivos en el path buscando como palabra completa
         in_path = bool(re.search(rf"\b{re.escape(brand_lower)}\b", path_lower))
 

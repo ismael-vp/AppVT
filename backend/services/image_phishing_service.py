@@ -172,7 +172,7 @@ def _extract_text_from_image_sync(image_bytes: bytes) -> str:
 
     # 4. OCR
     text = pytesseract.image_to_string(img, config=TESSERACT_CONFIG)
-    
+
     return f"{text}\n{qr_text_found}".strip()
 
 async def _api_call_with_retry(callable, max_retries: int = MAX_RETRIES):

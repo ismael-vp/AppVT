@@ -350,10 +350,18 @@ export default function CommunityTab({ targetResource }: CommunityTabProps) {
               <button
                 type="submit"
                 disabled={submitting || !newComment.trim()}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium py-2 px-4 rounded-lg flex items-center gap-2 transition-all active:scale-[0.98]"
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] min-w-[110px]"
               >
-                {submitting ? 'Publicando...' : 'Comentar'}
-                {!submitting && <Send size={14} />}
+                {submitting ? (
+                  <div className="flex items-center space-x-2">
+                    <span>Publicando</span>
+                    <div className="flex space-x-1">
+                      <div className="w-1 h-1 bg-white/80 rounded-full animate-dot-jump"></div>
+                      <div className="w-1 h-1 bg-white/80 rounded-full animate-dot-jump delay-200"></div>
+                      <div className="w-1 h-1 bg-white/80 rounded-full animate-dot-jump delay-400"></div>
+                    </div>
+                  </div>
+                ) : 'Comentar'}
               </button>
             </div>
           </form>

@@ -17,6 +17,16 @@ function getBadge(total: number): { label: string } {
   return { label: 'Explorador' };
 }
 
+function getBadgeStyle(label: string) {
+  switch(label) {
+    case 'Élite': return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
+    case 'Experto': return 'bg-purple-500/10 text-purple-400 border border-purple-500/20';
+    case 'Cazador': return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
+    case 'Guardián': return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+    default: return 'bg-zinc-800/50 text-zinc-400 border border-zinc-700/50';
+  }
+}
+
 export default function LeaderboardContent() {
   const [entries, setEntries] = useState<LeaderEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,12 +75,12 @@ export default function LeaderboardContent() {
       <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
         <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between">
           <h2 className="text-xs font-medium text-zinc-400 uppercase tracking-widest">Clasificación Global</h2>
-          <span className="text-xs text-zinc-700">{entries.length} usuarios</span>
+          <span className="text-xs text-zinc-500">{entries.length} usuarios</span>
         </div>
 
         <div className="divide-y divide-zinc-900/70">
           {entries.length === 0 && (
-            <div className="py-16 text-center text-zinc-700 text-sm">
+            <div className="py-16 text-center text-zinc-500 text-sm">
               Aún no hay datos suficientes para mostrar el ranking.
             </div>
           )}
@@ -85,7 +95,7 @@ export default function LeaderboardContent() {
                 className="flex items-center gap-5 px-6 py-4 hover:bg-zinc-900/30 transition-colors"
               >
                 {/* Posición */}
-                <span className={`text-xs font-mono w-5 text-center shrink-0 ${rank <= 3 ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                <span className={`text-xs font-mono w-5 text-center shrink-0 ${rank <= 3 ? 'text-zinc-300' : 'text-zinc-500'}`}>
                   {rank}
                 </span>
 
@@ -93,10 +103,12 @@ export default function LeaderboardContent() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-zinc-200 truncate">{entry.display_name}</span>
-                    <span className="text-[10px] text-zinc-600 uppercase tracking-wider">{badge.label}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-medium ${getBadgeStyle(badge.label)}`}>
+                      {badge.label}
+                    </span>
                   </div>
                   {entry.threats > 0 && (
-                    <p className="text-[11px] text-zinc-700 mt-0.5">
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
                       {entry.threats} amenazas detectadas · {threatRate}%
                     </p>
                   )}
@@ -105,7 +117,7 @@ export default function LeaderboardContent() {
                 {/* Análisis count */}
                 <div className="text-right shrink-0">
                   <span className="text-sm font-mono text-zinc-400">{entry.total}</span>
-                  <p className="text-[10px] text-zinc-700">análisis</p>
+                  <p className="text-[10px] text-zinc-500">análisis</p>
                 </div>
               </div>
             );
@@ -120,9 +132,11 @@ export default function LeaderboardContent() {
         </div>
         <div className="grid grid-cols-5 divide-x divide-zinc-900">
           {BADGE_TIERS.map(b => (
-            <div key={b.label} className="flex flex-col items-center gap-1 py-5 px-2 text-center">
-              <span className="text-xs font-medium text-zinc-300">{b.label}</span>
-              <span className="text-[10px] text-zinc-700">{b.req}</span>
+            <div key={b.label} className="flex flex-col items-center justify-center gap-2 py-6 px-2 text-center">
+              <span className={`text-[11px] px-2.5 py-0.5 rounded-full uppercase tracking-wider font-medium ${getBadgeStyle(b.label)}`}>
+                {b.label}
+              </span>
+              <span className="text-[10px] text-zinc-500">{b.req}</span>
             </div>
           ))}
         </div>

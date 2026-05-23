@@ -29,6 +29,7 @@ VT_RATE_LIMIT_WINDOW = int(os.getenv("VT_RATE_LIMIT_WINDOW", "60"))
 
 from utils.cache_service import CacheService
 
+
 def _check_vt_rate_limit(identifier: str) -> bool:
     """Verifica si una petición a VT está dentro del límite permitido usando Redis/Caché."""
     cache = CacheService()

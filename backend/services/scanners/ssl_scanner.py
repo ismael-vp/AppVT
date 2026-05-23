@@ -150,7 +150,7 @@ class SSLScanner:
 
             if is_expired or is_expiring_soon:
                 is_suspicious = True
-                
+
             import re
             if cipher_name and re.search(r"\b(RC4|3DES|DES|MD5)\b", cipher_name):
                 is_suspicious = True

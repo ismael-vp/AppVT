@@ -20,6 +20,7 @@ export const metadata: Metadata = {
 import ServerStatus from "@/components/ui/ServerStatus";
 import { ClientAuthProvider } from "@/components/auth/ClientAuthProvider";
 import ToastContainer from "@/components/ui/ToastContainer";
+import { Header } from "@/components/ui/Header";
 
 export default function RootLayout({
   children,
@@ -37,6 +38,7 @@ export default function RootLayout({
         <ClientAuthProvider>
           <ServerStatus />
           <ToastContainer />
+          <Header />
           {children}
         </ClientAuthProvider>
       </body>

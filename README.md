@@ -60,3 +60,19 @@ PhishingScanner/
 * **Plataformas:** 
   * Frontend optimizado para despliegue automático (Zero-config) en **Vercel**. 
   * Backend preparado para despliegue en contenedores vía **Render**, **Railway** o cualquier servidor **VPS**.
+
+## Despliegue en Producción (VPS con Docker)
+
+Si deseas auto-alojar toda la infraestructura (Frontend + Backend + Redis) en un VPS (ej. DigitalOcean, AWS EC2, Hetzner), hemos preparado una configuración optimizada.
+
+**1. Preparar el entorno:**
+Asegúrate de clonar el repositorio en tu servidor y crear el archivo `.env` en la raíz basándote en el `.env.example`.
+
+**2. Compilar y levantar servicios:**
+Utiliza el archivo de docker-compose específico para producción. Este archivo asume que el código ya no cambiará dinámicamente y utiliza versiones standalone muy ligeras:
+```bash
+docker-compose -f docker-compose.prod.yml up -d --build
+```
+
+**Nota sobre SSL (HTTPS):**
+El archivo `docker-compose.prod.yml` expone los puertos 3000 y 8000. Se recomienda encarecidamente utilizar un Reverse Proxy externo (como Cloudflare, Nginx proxy manager, o el propio Vercel si despliegas el frontend allí) para manejar la terminación SSL y los certificados HTTPS.

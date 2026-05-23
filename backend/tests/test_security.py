@@ -155,8 +155,9 @@ class TestWhoisHostnameValidation:
 @pytest.mark.asyncio
 class TestResolveRedirectChain:
     async def test_resolve_no_redirect(self, monkeypatch):
-        from services.utils import resolve_redirect_chain
         import httpx
+
+        from services.utils import resolve_redirect_chain
 
         async def mock_is_safe_url_async(url):
             return True
@@ -181,8 +182,9 @@ class TestResolveRedirectChain:
         assert chain == ["https://www.example.com"]
 
     async def test_resolve_single_redirect(self, monkeypatch):
-        from services.utils import resolve_redirect_chain
         import httpx
+
+        from services.utils import resolve_redirect_chain
 
         async def mock_is_safe_url_async(url):
             return True
@@ -213,8 +215,9 @@ class TestResolveRedirectChain:
         assert len(calls) == 2
 
     async def test_resolve_unsafe_redirect(self, monkeypatch):
-        from services.utils import resolve_redirect_chain
         import httpx
+
+        from services.utils import resolve_redirect_chain
 
         class DummyResponse:
             def __init__(self, status_code, headers):

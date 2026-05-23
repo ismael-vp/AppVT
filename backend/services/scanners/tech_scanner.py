@@ -232,17 +232,17 @@ class TechScanner:
 
         is_obfuscated = False
         anti_bot = False
-        
+
         # Detect obfuscation
         obfuscation_patterns = [
             r"eval\s*\(\s*atob\s*\(",
-            r"(?:\\x[0-9a-fA-F]{2}){5,}", 
+            r"(?:\\x[0-9a-fA-F]{2}){5,}",
             r"var\s+_0x[0-9a-fA-F]+\s*=",
             r"\[\s*['\"]\\x"
         ]
         if any(re.search(pat, html_content) for pat in obfuscation_patterns):
             is_obfuscated = True
-            
+
         # Detect anti-bot
         anti_bot_patterns = [
             r"navigator\.webdriver",

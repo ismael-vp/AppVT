@@ -6,7 +6,7 @@ import logging
 import tldextract
 
 from models.osint_models import TyposquattingData
-from services.utils import TARGET_BRANDS, LEGITIMATE_DOMAINS, levenshtein_similarity
+from services.utils import LEGITIMATE_DOMAINS, TARGET_BRANDS, levenshtein_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def _detect_levenshtein_typos(domain: str) -> tuple[bool, str | None, float]:
     for brand in TARGET_BRANDS:
         if len(brand) <= 3:
             continue
-            
+
         if domain == brand:
             continue
 
@@ -133,7 +133,7 @@ def _detect_prefix_suffix(domain: str) -> tuple[bool, str | None, float]:
     for brand in TARGET_BRANDS:
         if len(brand) <= 3:
             continue
-            
+
         if domain == brand:
             continue
 
@@ -228,11 +228,11 @@ class TyposquattingScanner:
 
         if len(main_domain) < MIN_DOMAIN_LENGTH:
             return None
-            
+
         # Bypass for legitimate domains
         if hostname in LEGITIMATE_DOMAINS:
             return None
-            
+
         for legit in LEGITIMATE_DOMAINS:
             if hostname.endswith("." + legit):
                 return None

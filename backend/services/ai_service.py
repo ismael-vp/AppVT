@@ -493,7 +493,7 @@ class AIService:
             response_content = response.choices[0].message.content
             if not response_content:
                 raise HTTPException(status_code=502, detail="La IA no generó respuesta.")
-            
+
             try:
                 parsed = json.loads(response_content.strip())
                 return {
