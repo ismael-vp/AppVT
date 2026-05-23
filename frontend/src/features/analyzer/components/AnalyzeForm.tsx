@@ -1,21 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import axios from 'axios';
 import { useThreatStore } from '@/store/useThreatStore';
 import { Link, Search, X, Trash2, ScanLine } from 'lucide-react';
 import { API_URL } from '@/lib/api';
+import { useSearchParams } from 'next/navigation';
 
-export default function AnalyzeForm() {
+function AnalyzeFormInner() {
   const { mode, setMode, setIsScanning, setScanResult, setError, isScanning, scanResult } = useThreatStore();
   const [urlInput, setUrlInput] = useState('');
   const [imageInput, setImageInput] = useState<File | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('Iniciando análisis...');
+  const searchParams = useSearchParams();
+  const urlParam = searchParams.get('url');
 
   // 1. NUEVO ESTADO: Para guardar la URL segura de la imagen
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [hasAutoScanned, setHasAutoScanned] = useState(false);
 
   // --- EFECTO: Gestor de Memoria para la previsualización de imágenes (Fix Blob Leak) ---
   useEffect(() => {
@@ -36,10 +39,45 @@ export default function AnalyzeForm() {
   // --- EFECTO: Sincronización del input con el historial ---
   useEffect(() => {
     if (scanResult && scanResult.type === 'url' && scanResult.resourceName) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUrlInput(scanResult.resourceName);
     }
   }, [scanResult]);
+
+  // --- EFECTO: Auto-scan si viene url en los parámetros ---
+  useEffect(() => {
+    if (urlParam && !hasAutoScanned) {
+      setUrlInput(urlParam);
+      setMode('url');
+      setHasAutoScanned(true);
+
+      const doAutoScan = async () => {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+        abortControllerRef.current = new AbortController();
+        setError(null);
+        setIsScanning(true);
+        setScanResult(null);
+
+        try {
+          const response = await axios.post(`${API_URL}/api/analyze/url`,
+            { url: urlParam },
+            { signal: abortControllerRef.current.signal }
+          );
+          setScanResult(response.data, urlParam);
+        } catch (err: unknown) {
+          if (axios.isCancel(err) || abortControllerRef.current?.signal.aborted) return;
+          setError('Error al realizar el análisis automático.');
+        } finally {
+          if (!abortControllerRef.current?.signal.aborted) {
+            setIsScanning(false);
+          }
+        }
+      };
+      
+      doAutoScan();
+    }
+  }, [urlParam, hasAutoScanned, setMode, setIsScanning, setScanResult, setError]);
 
   // --- EFECTO: Gestor de mensajes de carga ---
   useEffect(() => {
@@ -207,7 +245,7 @@ export default function AnalyzeForm() {
 
   return (
     <div className="w-full max-w-5xl mx-auto bg-black border border-[#333] p-6 rounded-lg shadow-sm">
-      <div className="flex space-x-6 border-b border-[#333] mb-8">
+      <div className="flex flex-wrap gap-2 sm:gap-6 border-b border-[#333] mb-8">
         <button
           type="button"
           onClick={() => setMode('url')}
@@ -254,15 +292,13 @@ export default function AnalyzeForm() {
                 className="w-full bg-black border border-[#333] text-[#ededed] placeholder-[#888] text-sm rounded-md py-3 pl-10 pr-10 focus:outline-none focus:ring-1 focus:ring-white transition-shadow"
                 disabled={isScanning}
               />
-              {urlInput && !isScanning && (
-                <button
-                  type="button"
-                  onClick={() => setUrlInput('')}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#666] hover:text-white transition-colors"
-                >
-                  <X size={16} />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setUrlInput('')}
+                className={`absolute inset-y-0 right-0 pr-3 flex items-center text-[#666] hover:text-white transition-colors ${urlInput && !isScanning ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+              >
+                <X size={16} />
+              </button>
             </div>
           </div>
         ) : (
@@ -324,38 +360,39 @@ export default function AnalyzeForm() {
           <button
             type="submit"
             disabled={isScanning || (mode === 'url' ? !urlInput : !imageInput)}
-            className={`w-full flex items-center justify-center space-x-2 bg-white text-black font-medium py-3 rounded-md text-sm transition-all hover:bg-zinc-200 disabled:bg-zinc-900 disabled:text-zinc-500 ${isScanning ? 'cursor-wait' : 'disabled:cursor-not-allowed'
-              }`}
+            className={`w-full flex items-center justify-center space-x-2 bg-white text-black font-medium py-3 rounded-md text-sm transition-all hover:bg-zinc-200 disabled:bg-zinc-900 disabled:text-zinc-500 relative ${isScanning ? 'cursor-wait' : 'disabled:cursor-not-allowed'}`}
           >
-            {isScanning ? (
-              <div className="flex items-center space-x-3">
-                <div className="flex space-x-1.5">
-                  <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-dot-jump"></div>
-                  <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-dot-jump delay-200"></div>
-                  <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-dot-jump delay-400"></div>
-                </div>
-                <span className="text-zinc-400 font-normal">Analizando</span>
+            <div className={`flex items-center space-x-3 ${isScanning ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'}`}>
+              <div className="flex space-x-1.5">
+                <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-dot-jump"></div>
+                <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-dot-jump delay-200"></div>
+                <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-dot-jump delay-400"></div>
               </div>
-            ) : (
-              <span>
-                {mode === 'image' ? 'Analizar imagen' : 'Iniciar análisis'}
-              </span>
-            )}
+              <span className="text-zinc-400 font-normal">Analizando</span>
+            </div>
+            <span className={`${!isScanning ? 'opacity-100' : 'opacity-0 absolute'}`}>
+              {mode === 'image' ? 'Analizar imagen' : 'Iniciar análisis'}
+            </span>
           </button>
 
-          {isScanning && (
-            <p className="text-center text-[10px] text-zinc-600 mt-4 uppercase tracking-widest animate-pulse">
+          <div className="relative mt-4 h-6">
+            <p className={`text-center text-[10px] text-zinc-600 uppercase tracking-widest animate-pulse absolute w-full transition-opacity ${isScanning ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
               {loadingMessage}
             </p>
-          )}
-
-          {!isScanning && (
-            <p className="text-center text-xs text-zinc-500 mt-4">
+            <p className={`text-center text-xs text-zinc-500 absolute w-full transition-opacity ${!isScanning ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
               Impulsado por GPT-4o-mini y VirusTotal.
             </p>
-          )}
+          </div>
         </div>
       </form>
     </div>
+  );
+}
+
+export default function AnalyzeForm() {
+  return (
+    <Suspense fallback={<div className="w-full max-w-5xl mx-auto bg-black border border-[#333] p-6 rounded-lg shadow-sm text-center text-[#888]">Cargando...</div>}>
+      <AnalyzeFormInner />
+    </Suspense>
   );
 }

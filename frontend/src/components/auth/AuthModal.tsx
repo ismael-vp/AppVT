@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
+
 import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { X, Mail, Key, ArrowRight } from 'lucide-react';
@@ -254,7 +255,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         </div>
       </div>
     </>,
-
     document.body
   );
 };

@@ -115,7 +115,7 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
       </div>
 
       <div className="bg-black border border-[#333] rounded-lg overflow-hidden shadow-sm w-full">
-        <div className="flex border-b border-zinc-900 bg-zinc-950/50 px-6">
+        <div className="flex overflow-x-auto overflow-y-hidden whitespace-nowrap border-b border-zinc-900 bg-zinc-950/50 px-4 sm:px-6 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           <button
             onClick={() => setActiveTab('ai')}
             className={`py-4 px-4 sm:px-6 text-sm sm:text-base font-semibold flex items-center transition-all relative ${activeTab === 'ai' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}

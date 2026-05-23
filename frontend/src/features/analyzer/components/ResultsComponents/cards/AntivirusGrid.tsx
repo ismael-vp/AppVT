@@ -40,7 +40,7 @@ export default function AntivirusGrid({ engines, heuristicFlag }: AntivirusGridP
         </div>
       )}
 
-      <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 ${showAllEngines ? 'max-h-[450px] overflow-y-auto pr-2 custom-scrollbar' : ''}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 ${showAllEngines ? 'max-h-[450px] overflow-y-auto pr-2 custom-scrollbar' : ''}`}>
         {(showAllEngines ? sortedEngines : sortedEngines.slice(0, 12)).map((engine, idx) => (
           <div key={idx} className="flex items-center justify-between p-3 sm:p-4 h-14 bg-black border border-[#333] rounded-md overflow-hidden">
             <span className="text-[#ededed] font-medium text-sm truncate mr-3 flex-1 text-left">

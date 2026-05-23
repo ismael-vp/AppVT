@@ -7,7 +7,10 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
   const initializeAuth = useAuthStore((state) => state.initializeAuth);
 
   useEffect(() => {
-    initializeAuth();
+    const timer = setTimeout(() => {
+      initializeAuth();
+    }, 100);
+    return () => clearTimeout(timer);
   }, [initializeAuth]);
 
   return <>{children}</>;
