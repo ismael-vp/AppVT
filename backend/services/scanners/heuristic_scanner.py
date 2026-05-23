@@ -2,6 +2,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from urllib.parse import urlparse
+from typing import Any
 
 from models.osint_models import (
     HeuristicResult,
