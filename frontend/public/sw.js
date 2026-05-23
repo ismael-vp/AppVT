@@ -15,7 +15,7 @@ self.addEventListener('fetch', (event) => {
       return new Response('Estás desconectado. Revisa tu conexión a internet para continuar usando PhishingScanner.', {
         status: 503,
         statusText: 'Service Unavailable',
-        headers: new Headers({ 'Content-Type': 'text/plain' })
+        headers: new Headers({ 'Content-Type': 'text/plain; charset=utf-8' })
       });
     })
   );
