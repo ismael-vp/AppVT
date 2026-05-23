@@ -57,21 +57,23 @@ export function Header() {
       </div>
 
       {/* Mobile Navigation */}
-      {mobileMenuOpen && (
-        <div className="sm:hidden bg-zinc-950 border-b border-zinc-900 px-4 py-4 space-y-4">
-          <nav className="flex flex-col gap-4">
-            {navLinks.map((link) => (
-              <Link 
-                key={link.href} 
-                href={link.href} 
-                className={`text-sm transition-colors ${pathname === link.href ? 'text-indigo-400 font-medium' : 'text-zinc-400 hover:text-white'}`}
-              >
-                {link.name}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      )}
+      <div 
+        className={`sm:hidden bg-zinc-950 border-zinc-900 overflow-hidden transition-all duration-300 ease-in-out ${
+          mobileMenuOpen ? 'max-h-64 opacity-100 border-b py-4' : 'max-h-0 opacity-0 border-b-0 py-0'
+        }`}
+      >
+        <nav className="flex flex-col gap-4 px-4">
+          {navLinks.map((link) => (
+            <Link 
+              key={link.href} 
+              href={link.href} 
+              className={`text-sm transition-colors ${pathname === link.href ? 'text-indigo-400 font-medium' : 'text-zinc-400 hover:text-white'}`}
+            >
+              {link.name}
+            </Link>
+          ))}
+        </nav>
+      </div>
     </header>
   );
 }
