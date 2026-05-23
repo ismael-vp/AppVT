@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useToastStore } from '@/store/useToast';
 import { MessageSquare, Send, AlertCircle, Clock, User, Trash2, Edit2, X, Check, ShieldCheck, ShieldAlert, Users } from 'lucide-react';
+import { RequireLoginPanel } from '@/components/auth/RequireLoginPanel';
 
 interface VoteData {
   safe: number;
@@ -261,6 +262,20 @@ export default function CommunityTab({ targetResource }: CommunityTabProps) {
     return ageInMinutes <= 5;
   };
 
+  if (!session) {
+    return (
+      <RequireLoginPanel 
+        title="Acceso Requerido" 
+        message="Debes iniciar sesión para interactuar con la comunidad." 
+      >
+        <div className="space-y-6 w-full">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-lg h-36"></div>
+          <div className="bg-zinc-950 border border-zinc-900 rounded-lg h-[400px]"></div>
+        </div>
+      </RequireLoginPanel>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
 
@@ -315,9 +330,6 @@ export default function CommunityTab({ targetResource }: CommunityTabProps) {
               {votes.userVote === 'phishing' ? 'Votaste: Phishing' : 'Es Phishing'}
             </button>
           </div>
-          {!session && (
-            <p className="text-[11px] text-zinc-600 text-center mt-3">Inicia sesión para votar</p>
-          )}
         </div>
       )}
 
@@ -329,49 +341,40 @@ export default function CommunityTab({ targetResource }: CommunityTabProps) {
           Comparte descubrimientos, indicadores de compromiso (IOCs) o advertencias sobre este recurso.
 
         </p>
-
         {/* Formulario */}
-        {session ? (
-          <form onSubmit={handleSubmit} className="mb-8 space-y-3">
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Añade un comentario público... (sin enlaces)"
-              className="w-full bg-[#050505] border border-zinc-800 rounded-lg p-3 text-sm text-white placeholder-zinc-600 focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700 outline-none resize-none h-24 transition-all duration-200 ease-out"
-              disabled={submitting}
-            />
-            {error && (
-              <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 border border-red-500/20 p-2.5 rounded">
-                <AlertCircle size={14} />
-                <span>{error}</span>
-              </div>
-            )}
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={submitting || !newComment.trim()}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] min-w-[110px]"
-              >
-                {submitting ? (
-                  <div className="flex items-center space-x-2">
-                    <span>Publicando</span>
-                    <div className="flex space-x-1">
-                      <div className="w-1 h-1 bg-white/80 rounded-full animate-dot-jump"></div>
-                      <div className="w-1 h-1 bg-white/80 rounded-full animate-dot-jump delay-200"></div>
-                      <div className="w-1 h-1 bg-white/80 rounded-full animate-dot-jump delay-400"></div>
-                    </div>
-                  </div>
-                ) : 'Comentar'}
-              </button>
+        <form onSubmit={handleSubmit} className="mb-8 space-y-3">
+          <textarea
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            placeholder="Añade un comentario público... (sin enlaces)"
+            className="w-full bg-[#050505] border border-zinc-800 rounded-lg p-3 text-sm text-white placeholder-zinc-600 focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700 outline-none resize-none h-24 transition-all duration-200 ease-out"
+            disabled={submitting}
+          />
+          {error && (
+            <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 border border-red-500/20 p-2.5 rounded">
+              <AlertCircle size={14} />
+              <span>{error}</span>
             </div>
-          </form>
-        ) : (
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 text-center mb-8">
-            <p className="text-sm text-zinc-400">
-              Debes <button className="text-indigo-400 hover:text-indigo-300 font-medium border-b border-indigo-400/30">iniciar sesión</button> para poder comentar.
-            </p>
+          )}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={submitting || !newComment.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] min-w-[110px]"
+            >
+              {submitting ? (
+                <div className="flex items-center space-x-2">
+                  <span>Publicando</span>
+                  <div className="flex space-x-1">
+                    <div className="w-1 h-1 bg-white/80 rounded-full animate-dot-jump"></div>
+                    <div className="w-1 h-1 bg-white/80 rounded-full animate-dot-jump delay-200"></div>
+                    <div className="w-1 h-1 bg-white/80 rounded-full animate-dot-jump delay-400"></div>
+                  </div>
+                </div>
+              ) : 'Comentar'}
+            </button>
           </div>
-        )}
+        </form>
 
         {/* Lista de Comentarios */}
         <div className="space-y-4">

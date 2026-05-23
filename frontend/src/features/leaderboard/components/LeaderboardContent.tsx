@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { useAuthStore } from '@/store/useAuthStore';
+import { RequireLoginPanel } from '@/components/auth/RequireLoginPanel';
 
 interface LeaderEntry {
   user_id: string;
@@ -31,6 +33,7 @@ export default function LeaderboardContent() {
   const [entries, setEntries] = useState<LeaderEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuthStore();
 
   useEffect(() => {
     fetch('/api/leaderboard')
@@ -68,7 +71,7 @@ export default function LeaderboardContent() {
     { label: 'Élite',      req: '250+ análisis' },
   ];
 
-  return (
+  const content = (
     <div className="w-full max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 space-y-4">
 
       {/* Tabla */}
@@ -144,4 +147,17 @@ export default function LeaderboardContent() {
 
     </div>
   );
+
+  if (!user) {
+    return (
+      <RequireLoginPanel 
+        title="Acceso Requerido" 
+        message="Debes iniciar sesión para ver la clasificación global." 
+      >
+        {content}
+      </RequireLoginPanel>
+    );
+  }
+
+  return content;
 }

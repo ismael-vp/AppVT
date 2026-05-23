@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ScanResult } from '@/types';
 import { RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
+import { RequireLoginPanel } from '@/components/auth/RequireLoginPanel';
 import {
   AreaChart,
   Area,
@@ -157,11 +158,84 @@ export default function UserDashboard() {
 
   if (!isAuthenticated) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] text-center w-full max-w-md mx-auto">
-        <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-8 w-full">
-          <h2 className="text-lg font-medium text-zinc-200 mb-2">Acceso Requerido</h2>
-          <p className="text-sm text-zinc-500">Debes iniciar sesión para ver tus estadísticas y el historial de análisis.</p>
+      <div className="w-full max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+        {/* Header (No blurred) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-xl font-medium text-zinc-100 tracking-tight flex items-center gap-2">
+              Historial y Estadísticas
+            </h1>
+            <p className="text-sm text-zinc-500 mt-1">Métricas de tus análisis recientes</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex bg-[#0a0a0a] border border-zinc-800 rounded-lg p-0.5 text-xs">
+              <button className="px-4 py-2 rounded-md bg-[#222] text-white shadow-sm font-medium">Estadísticas</button>
+              <button className="px-4 py-2 rounded-md text-zinc-500 font-medium">Historial</button>
+            </div>
+          </div>
         </div>
+
+        <RequireLoginPanel 
+          title="Acceso Requerido" 
+          message="Debes iniciar sesión para ver tus estadísticas y el historial de análisis." 
+        >
+          <div className="w-full">
+            {/* ── KPIs Falsos ── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-5 flex flex-col justify-between">
+                <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Análisis Totales</p>
+                <p className="text-3xl font-medium text-zinc-200">1,248</p>
+              </div>
+              <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-5 flex flex-col justify-between">
+                <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Amenazas Detectadas</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-3xl font-medium text-red-400">184</p>
+                  <p className="text-xs text-zinc-500">(15%)</p>
+                </div>
+              </div>
+              <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-5 flex flex-col justify-between">
+                <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Seguros</p>
+                <p className="text-3xl font-medium text-emerald-400">1,064</p>
+              </div>
+              <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-5 flex flex-col justify-between">
+                <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Riesgo Medio</p>
+                <p className="text-3xl font-medium text-amber-400">34<span className="text-sm text-zinc-600 font-normal ml-1">/100</span></p>
+              </div>
+            </div>
+
+            {/* Fake Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+              <div className="lg:col-span-2 bg-[#050505] border border-zinc-800/80 rounded-xl p-6 h-60">
+                 {/* Simulate area chart */}
+                 <div className="w-full h-full bg-gradient-to-t from-zinc-900/50 to-transparent rounded-lg border-b border-zinc-800 relative overflow-hidden">
+                    <svg className="absolute bottom-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+                       <path d="M0,100 L0,80 Q10,70 20,80 T40,60 T60,80 T80,50 T100,60 L100,100 Z" fill="rgba(82, 82, 91, 0.2)" />
+                       <path d="M0,80 Q10,70 20,80 T40,60 T60,80 T80,50 T100,60" fill="none" stroke="#71717a" strokeWidth="2" />
+                    </svg>
+                 </div>
+              </div>
+              <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-6 h-60 flex items-center justify-center">
+                 <div className="w-32 h-32 rounded-full border-[16px] border-[#10b981] border-t-[#ef4444] opacity-50"></div>
+              </div>
+            </div>
+            
+            {/* Bottom Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-6 h-48 flex flex-col gap-3 justify-end">
+                 <div className="h-6 bg-indigo-500/50 w-full rounded-r-md"></div>
+                 <div className="h-6 bg-indigo-500/50 w-5/6 rounded-r-md"></div>
+                 <div className="h-6 bg-indigo-500/50 w-4/6 rounded-r-md"></div>
+                 <div className="h-6 bg-indigo-500/50 w-3/6 rounded-r-md"></div>
+              </div>
+              <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-6 h-48 flex flex-col gap-3 justify-end">
+                 <div className="h-6 bg-zinc-700/50 w-full rounded-r-md"></div>
+                 <div className="h-6 bg-zinc-700/50 w-4/5 rounded-r-md"></div>
+                 <div className="h-6 bg-zinc-700/50 w-3/5 rounded-r-md"></div>
+                 <div className="h-6 bg-zinc-700/50 w-2/5 rounded-r-md"></div>
+              </div>
+            </div>
+          </div>
+        </RequireLoginPanel>
       </div>
     );
   }
@@ -262,7 +336,7 @@ export default function UserDashboard() {
               <h3 className="text-xs font-medium text-zinc-400 mb-6 uppercase tracking-wider">Distribución</h3>
               <div className="w-full h-60">
                 {metrics.total > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%" minHeight={240}>
+                  <ResponsiveContainer width="100%" height="100%" minHeight={240} minWidth={0}>
                     <PieChart>
                       <Pie
                         data={[

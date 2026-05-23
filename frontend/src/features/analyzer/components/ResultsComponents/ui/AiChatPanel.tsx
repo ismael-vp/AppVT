@@ -1,5 +1,7 @@
 import React from 'react';
 import { Send } from 'lucide-react';
+import { useAuthStore } from '@/store/useAuthStore';
+import { RequireLoginPanel } from '@/components/auth/RequireLoginPanel';
 
 import { ChatMessage } from '@/store/useThreatStore';
 
@@ -26,6 +28,32 @@ export default function AiChatPanel({
   placeholder = "Pregunta algo a la IA...",
   emptyStateMessage = "Puedes hacer preguntas sobre los resultados del análisis."
 }: AiChatPanelProps) {
+  const { session } = useAuthStore();
+
+  if (!session) {
+    return (
+      <RequireLoginPanel 
+        title="Acceso Requerido" 
+        message="Debes iniciar sesión para consultar al analista de IA." 
+      >
+        <div className="bg-black border border-[#333] rounded-lg p-6 h-[250px] flex flex-col">
+          <div className="h-6 w-40 bg-[#222] rounded mb-6"></div>
+          <div className="space-y-4 flex-1">
+            <div className="space-y-2 flex flex-col items-end">
+              <div className="h-3 w-10 bg-[#222] rounded"></div>
+              <div className="h-8 w-1/3 bg-[#1a1a1a] rounded-lg"></div>
+            </div>
+            <div className="space-y-2">
+              <div className="h-3 w-10 bg-[#222] rounded"></div>
+              <div className="h-10 w-2/3 bg-[#1a1a1a] rounded-lg"></div>
+            </div>
+          </div>
+          <div className="h-10 w-full bg-[#111] rounded-md border border-[#333] mt-auto"></div>
+        </div>
+      </RequireLoginPanel>
+    );
+  }
+
   return (
     <div className="bg-black border border-[#333] rounded-lg p-6">
       <div className="flex justify-between items-center mb-6">

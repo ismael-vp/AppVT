@@ -31,9 +31,20 @@ export const useToastStore = create<ToastState>((set) => ({
   
   showToast: (message, type = 'info') => {
     const id = `toast-${++toastCounter}`;
-    set((state) => ({
-      toasts: [...state.toasts, { id, message, type }]
-    }));
+    set((state) => {
+      // Prevent identical consecutive toasts
+      if (state.toasts.length > 0 && state.toasts[state.toasts.length - 1].message === message) {
+        return state;
+      }
+
+      const newToasts = [...state.toasts, { id, message, type }];
+      // Keep only the last 3 toasts to avoid filling the screen
+      if (newToasts.length > 3) {
+        newToasts.shift();
+      }
+
+      return { toasts: newToasts };
+    });
     
     // Auto-dismiss
     setTimeout(() => {
