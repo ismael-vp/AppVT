@@ -34,6 +34,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (session?.user) {
         useThreatStore.getState().syncFromCloud();
       }
+
+      // Limpiar el access_token de la URL también al recargar la página inicial
+      if (typeof window !== 'undefined' && window.location.hash.includes('access_token=')) {
+        setTimeout(() => {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }, 100);
+      }
     });
 
     supabase.auth.onAuthStateChange((event, session) => {
