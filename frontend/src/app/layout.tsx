@@ -36,7 +36,7 @@ import { ClientAuthProvider } from "@/components/auth/ClientAuthProvider";
 import ToastContainer from "@/components/ui/ToastContainer";
 import { Header } from "@/components/ui/Header";
 
-import { GoogleAnalytics } from '@next/third-parties/google';
+import { GoogleTagManager } from '@next/third-parties/google';
 
 export default function RootLayout({
   children,
@@ -50,8 +50,8 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID || ''} />
       <body className="min-h-full flex flex-col bg-[#080808]" suppressHydrationWarning>
-        {process.env.NEXT_PUBLIC_GA_ID && <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />}
         <script
           dangerouslySetInnerHTML={{
             __html: `
