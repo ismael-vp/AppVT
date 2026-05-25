@@ -36,10 +36,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.onAuthStateChange((event, session) => {
       set({ session, user: session?.user || null });
       if (session?.user) {
         useThreatStore.getState().syncFromCloud();
+      }
+
+      // Limpiar el access_token de la URL por seguridad y estética después del login OAuth
+      if (typeof window !== 'undefined' && window.location.hash.includes('access_token=')) {
+        setTimeout(() => {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }, 100);
       }
     });
   }
