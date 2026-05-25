@@ -14,7 +14,7 @@
     "@marsidev/react-turnstile": "^1.5.2",
     "@next/third-parties": "^16.2.6",
     "@supabase/supabase-js": "^2.106.1",
-    "axios": "^1.15.2",
+    "axios": "^1.16.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "d3-geo": "^3.1.1",
