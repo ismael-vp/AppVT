@@ -55,70 +55,60 @@ export default function AiChatPanel({
   }
 
   return (
-    <div className="bg-black border border-[#333] rounded-lg p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-[#ededed] text-xl font-medium">Pregunta a la IA</h3>
+    <div className="bg-[#0d0d0d] border border-zinc-800/50 rounded-xl p-5">
+      <div className="flex justify-between items-center mb-5">
+        <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Consulta a la IA</p>
         {handleClearChat && chatMessages.length > 0 && (
-          <button
-            onClick={handleClearChat}
-            className="text-xs text-[#888] hover:text-[#ededed] transition-colors"
-          >
-            Limpiar Chat
+          <button onClick={handleClearChat} className="text-xs text-zinc-600 hover:text-zinc-300 transition-colors">
+            Limpiar
           </button>
         )}
       </div>
 
-      {/* Historial de Mensajes */}
-      <div className="space-y-6 mb-6 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="space-y-5 mb-5 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
         {chatMessages.map((msg, idx) => (
-          <div key={idx} className="flex flex-col space-y-1.5">
+          <div key={idx} className="flex flex-col gap-1">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-[#888]">
+              <span className="text-[10px] font-medium text-zinc-600 uppercase tracking-wider">
                 {msg.role === 'user' ? 'Tú' : 'IA'}
               </span>
               {msg.role === 'user' && handleEditMessage && (
-                <button
-                  onClick={() => handleEditMessage(idx)}
-                  className="text-xs text-[#555] hover:text-[#ededed] transition-colors"
-                >
+                <button onClick={() => handleEditMessage(idx)} className="text-[10px] text-zinc-700 hover:text-zinc-400 transition-colors">
                   Editar
                 </button>
               )}
             </div>
-            <p className="text-base text-[#ededed] leading-relaxed whitespace-pre-wrap">
-              {msg.content}
-            </p>
+            <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">{msg.content}</p>
           </div>
         ))}
 
         {isChatLoading && (
-          <div className="flex flex-col space-y-1.5 animate-pulse">
-            <span className="text-sm font-medium text-[#888]">IA</span>
-            <p className="text-base text-[#555]">Analizando consulta...</p>
+          <div className="flex flex-col gap-1 animate-pulse">
+            <span className="text-[10px] font-medium text-zinc-600 uppercase tracking-wider">IA</span>
+            <p className="text-sm text-zinc-500">Analizando…</p>
           </div>
         )}
 
         {chatMessages.length === 0 && !isChatLoading && (
-          <p className="text-sm text-[#555] italic">{emptyStateMessage}</p>
+          <p className="text-xs text-zinc-600">{emptyStateMessage}</p>
         )}
       </div>
 
-      {/* Input y Botón de Envío */}
       <form onSubmit={handleSendMessage} className="relative flex items-center">
         <input
           type="text"
           value={chatInput}
           onChange={(e) => setChatInput(e.target.value)}
           placeholder={placeholder}
-          className="w-full bg-black border border-[#333] text-base text-[#ededed] rounded-md py-3 pl-4 pr-12 focus:outline-none focus:border-white transition-colors placeholder:text-[#555]"
+          className="w-full bg-[#080808] border border-zinc-800/80 text-sm text-zinc-200 rounded-lg py-3 pl-4 pr-12 focus:outline-none focus:border-zinc-600 transition-colors placeholder:text-zinc-700"
           disabled={isChatLoading}
         />
         <button
           type="submit"
           disabled={!chatInput.trim() || isChatLoading}
-          className="absolute right-3 p-2 text-[#ededed] disabled:text-[#444] hover:text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+          className="absolute right-3 p-1.5 text-zinc-500 disabled:text-zinc-700 hover:text-zinc-200 transition-colors cursor-pointer disabled:cursor-not-allowed"
         >
-          <Send size={18} />
+          <Send size={16} />
         </button>
       </form>
     </div>

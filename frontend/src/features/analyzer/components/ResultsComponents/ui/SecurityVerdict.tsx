@@ -84,104 +84,80 @@ export default function SecurityVerdict({ scanResult }: SecurityVerdictProps) {
 
   return (
     <div className="animate-in slide-in-from-top-4 duration-700">
-      <div className="flex items-center space-x-4 mb-3">
-        <div className={`p-2 rounded-xl border ${isCritical ? 'bg-red-500/5 border-red-500/20' :
-            isDangerous ? 'bg-orange-500/5 border-orange-500/20' :
-              'bg-green-500/5 border-green-500/20'
-          }`}>
+      <div className="flex items-center gap-4 mb-4">
+        <div className={`p-2.5 rounded-xl border ${isCritical ? 'bg-red-500/5 border-red-500/20' : isDangerous ? 'bg-orange-500/5 border-orange-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}` }>
           {isCritical ? (
-            <ShieldAlert size={32} className="text-red-500" />
+            <ShieldAlert size={28} className="text-red-500" />
           ) : isDangerous ? (
-            <ShieldAlert size={32} className="text-orange-500" />
+            <ShieldAlert size={28} className="text-orange-500" />
           ) : (
-            <ShieldCheck size={32} className="text-green-500" />
+            <ShieldCheck size={28} className="text-emerald-500" />
           )}
         </div>
-        <div className="flex flex-col">
-          <div className="flex items-center space-x-3">
-            <h2 className="text-2xl font-bold text-white tracking-tight">
+        <div>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold text-white tracking-tight">
               {isCritical ? 'Sitio Inseguro' : isDangerous ? 'Riesgo Detectado' : 'Sitio Seguro'}
             </h2>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-widest ${isCritical ? 'text-red-500 border-red-500/20 bg-red-500/10' :
-                isDangerous ? 'text-orange-500 border-orange-500/20 bg-orange-500/10' :
-                  'text-green-500 border-green-500/20 bg-green-500/10'
-              }`}>
-              {isCritical ? 'Riesgo Alto' : isDangerous ? 'Riesgo Medio' : 'Seguro'}
+            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-widest ${
+              isCritical ? 'text-red-500 border-red-500/20 bg-red-500/10' :
+              isDangerous ? 'text-orange-500 border-orange-500/20 bg-orange-500/10' :
+              'text-emerald-500 border-emerald-500/20 bg-emerald-500/10'
+            }`}>
+              {isCritical ? 'Alto riesgo' : isDangerous ? 'Riesgo medio' : 'Seguro'}
             </span>
           </div>
-          <p className="text-zinc-500 text-sm mt-1">
-            Resultado de Seguridad
-          </p>
+          <p className="text-zinc-500 text-sm mt-0.5">{verdictDescription}</p>
         </div>
       </div>
 
-      <div className="pl-[60px]">
-        <p className="text-zinc-400 text-base leading-relaxed">
-          {verdictDescription}
-        </p>
-
-        {heuristicResult && (
-          <div className="mt-6 border-t border-zinc-800/50 pt-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="flex items-center gap-4">
-                <div className="relative flex items-center justify-center">
-                  <svg className="size-16 transform -rotate-90">
-                    <circle
-                      cx="32"
-                      cy="32"
-                      r="28"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="transparent"
-                      className="text-zinc-800/50"
-                    />
-                    <circle
-                      cx="32"
-                      cy="32"
-                      r="28"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="transparent"
-                      strokeDasharray={175.92}
-                      strokeDashoffset={175.92 - (175.92 * riskScore) / 100}
-                      className={`${riskScore >= 70 ? 'text-red-500' : riskScore >= 40 ? 'text-orange-500' : 'text-green-500'} transition-all duration-1000 ease-out`}
-                    />
-                  </svg>
-                  <span className="absolute text-sm font-bold text-white">{riskScore}</span>
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    {getLevelIcon(level)}
-                    <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 rounded border ${getLevelColor(level)}`}>
-                      Nivel {getLevelLabel(level)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-400">Puntuación de riesgo heurístico</p>
-                </div>
+      {heuristicResult && (
+        <div className="mt-6 border-t border-zinc-800/50 pt-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="flex flex-col md:flex-row md:items-center gap-6">
+            <div className="flex items-center gap-4">
+              <div className="relative flex items-center justify-center">
+                <svg className="size-14 transform -rotate-90">
+                  <circle cx="28" cy="28" r="23" stroke="currentColor" strokeWidth="3" fill="transparent" className="text-zinc-800/60" />
+                  <circle cx="28" cy="28" r="23" stroke="currentColor" strokeWidth="3" fill="transparent"
+                    strokeDasharray={144.51}
+                    strokeDashoffset={144.51 - (144.51 * riskScore) / 100}
+                    className={`${riskScore >= 70 ? 'text-red-500' : riskScore >= 40 ? 'text-orange-500' : 'text-emerald-500'} transition-all duration-1000 ease-out`}
+                  />
+                </svg>
+                <span className="absolute text-xs font-bold text-white">{riskScore}</span>
               </div>
-
-              <div className="hidden md:block h-12 w-[1px] bg-zinc-800"></div>
-
-              <div className="flex-1">
-                <p className="text-xs text-zinc-400 mb-2 font-medium uppercase tracking-tight">
-                  Indicadores Detectados ({flags.length})
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {flags.length > 0 ? (
-                    flags.map((flag) => (
-                      <span key={flag} className="text-[10px] bg-zinc-900 border border-zinc-800 text-zinc-300 px-2 py-1 rounded">
-                        {flag}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-[10px] text-zinc-500 italic">No se detectaron anomalías heurísticas significativas.</span>
-                  )}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  {getLevelIcon(level)}
+                  <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 rounded border ${getLevelColor(level)}`}>
+                    {getLevelLabel(level)}
+                  </span>
                 </div>
+                <p className="text-xs text-zinc-500">Riesgo heurístico</p>
+              </div>
+            </div>
+
+            <div className="hidden md:block h-10 w-px bg-zinc-800/60" />
+
+            <div className="flex-1">
+              <p className="text-[10px] text-zinc-500 mb-2 font-medium uppercase tracking-wider">
+                Indicadores ({flags.length})
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {flags.length > 0 ? (
+                  flags.map((flag) => (
+                    <span key={flag} className="text-[10px] bg-zinc-900/80 border border-zinc-800/60 text-zinc-400 px-2 py-0.5 rounded-md">
+                      {flag}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-[10px] text-zinc-600 italic">Sin anomalías heurísticas.</span>
+                )}
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

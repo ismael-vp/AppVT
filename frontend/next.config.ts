@@ -12,8 +12,6 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60,
     formats: ["image/webp"],
   },
-  // Habilitar modo standalone para Docker
-  output: "standalone",
 };
 
 export default nextConfig;

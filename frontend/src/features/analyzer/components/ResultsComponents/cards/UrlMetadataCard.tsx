@@ -20,83 +20,76 @@ interface UrlMetadataCardProps {
 export default function UrlMetadataCard({ resourceName, isMalicious, osintData }: UrlMetadataCardProps) {
   return (
     <div>
-      <h4 className="text-[#ededed] text-xl font-medium mb-4">Metadatos</h4>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 p-8 border border-[#333] rounded-md bg-[#050505] mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-6 border border-zinc-800/50 rounded-xl bg-[#0d0d0d] mb-6">
         
-        {/* Recurso Analizado + Defanging */}
-        <div className="flex flex-col space-y-2 col-span-1 md:col-span-2">
-          <span className="text-sm text-[#888]">Recurso Analizado</span>
-          <div className="flex items-center space-x-4">
-            <span className="text-base text-[#ededed] font-medium font-mono truncate max-w-[300px] md:max-w-md">
-              {resourceName || '-'}
+        {/* Recurso */}
+        <div className="flex flex-col gap-1.5 col-span-1 md:col-span-2">
+          <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Recurso</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-zinc-200 font-medium font-mono truncate max-w-[260px] md:max-w-md">
+              {resourceName || '—'}
             </span>
             <button
               onClick={() => {
                 if (resourceName) {
                   const defanged = resourceName.replace(/http/gi, 'hxxp').replace(/\./g, '[.]');
                   navigator.clipboard.writeText(defanged);
-                  useToastStore.getState().showToast("URL segura copiada al portapapeles", "success");
+                  useToastStore.getState().showToast('URL segura copiada', 'success');
                 }
               }}
-              className="text-xs uppercase font-bold px-3 py-1.5 bg-[#111] hover:bg-[#222] text-[#ededed] rounded transition-colors border border-[#333]"
+              className="text-[10px] uppercase font-bold px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 rounded-md transition-colors border border-zinc-800/60"
             >
-              Copiar Defanged
+              Defang
             </button>
           </div>
         </div>
 
         {/* Categoría */}
-        <div className="flex flex-col space-y-2 justify-center">
-          <span className="text-sm text-[#888]">Categoría Primaria</span>
-          <span className="text-base text-[#ededed] font-medium">
-            {isMalicious ? 'Phishing / Malware' : 'Benigno'}
-          </span>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Categoría</span>
+          <span className="text-sm text-zinc-200 font-medium">{isMalicious ? 'Phishing / Malware' : 'Benigno'}</span>
         </div>
 
-        {/* IP y Geolocalización */}
-        <div className="flex flex-col space-y-2 justify-center">
-          <span className="text-sm text-[#888]">Resolución / IP</span>
+        {/* IP */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] text-zinc-500 uppercase tracking-wider">IP</span>
           {osintData?.geolocation ? (
-            <div className="flex flex-col space-y-1">
-              <span className="text-base text-[#ededed] font-medium font-mono">
-                {osintData.geolocation.ip}
-              </span>
-              <span className="text-xs text-[#888] truncate max-w-[200px]" title={`${osintData.geolocation.country} - ${osintData.geolocation.isp}`}>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm text-zinc-200 font-medium font-mono">{osintData.geolocation.ip}</span>
+              <span className="text-[10px] text-zinc-500 truncate" title={`${osintData.geolocation.country} - ${osintData.geolocation.isp}`}>
                 {getFlagEmoji(osintData.geolocation.countryCode)} {osintData.geolocation.isp}
               </span>
             </div>
           ) : (
-            <span className="text-base text-[#ededed] font-medium font-mono">
-              Desconocida
-            </span>
+            <span className="text-sm text-zinc-500">Desconocida</span>
           )}
         </div>
 
-        {/* Reputación IP */}
+        {/* Reputación */}
         {osintData?.abuseConfidenceScore !== undefined && osintData.abuseConfidenceScore !== null && (
-          <div className="flex flex-col space-y-2 justify-center">
-            <span className="text-sm text-[#888]">Reputación IP (AbuseIPDB)</span>
-            <div className="flex items-center space-x-2">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Reputación IP</span>
+            <div className="flex items-center gap-2">
               {osintData.abuseConfidenceScore === 0 ? (
-                <span className="text-base text-[#ededed] font-medium">0% (Limpia)</span>
+                <span className="text-sm text-zinc-200 font-medium">0% (Limpia)</span>
               ) : osintData.abuseConfidenceScore > 50 ? (
-                <div className="flex items-center space-x-2">
-                  <span className="text-base text-red-500 font-medium">{osintData.abuseConfidenceScore}%</span>
-                  <span className="bg-red-900/50 text-red-500 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border border-red-800">Maliciosa</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-red-400 font-medium">{osintData.abuseConfidenceScore}%</span>
+                  <span className="bg-red-900/40 text-red-400 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border border-red-800/50">Maliciosa</span>
                 </div>
               ) : (
-                <span className="text-base text-yellow-500 font-medium">{osintData.abuseConfidenceScore}%</span>
+                <span className="text-sm text-amber-400 font-medium">{osintData.abuseConfidenceScore}%</span>
               )}
-              <span className="text-xs text-[#666]">({osintData.totalReports || 0} reportes)</span>
+              <span className="text-[10px] text-zinc-600">({osintData.totalReports || 0} rep.)</span>
             </div>
           </div>
         )}
 
         {/* WHOIS */}
         {osintData?.whois && (
-          <div className="flex flex-col space-y-2 justify-center">
-            <span className="text-sm text-[#888]">Registrador WHOIS</span>
-            <span className="text-base text-[#ededed] font-medium truncate" title={osintData.whois.registrar || 'Privado'}>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Registrador</span>
+            <span className="text-sm text-zinc-200 font-medium truncate" title={osintData.whois.registrar || 'Privado'}>
               {osintData.whois.registrar || 'Privado'}
             </span>
           </div>
@@ -104,9 +97,9 @@ export default function UrlMetadataCard({ resourceName, isMalicious, osintData }
 
         {/* SSL */}
         {osintData?.ssl && (
-          <div className="flex flex-col space-y-2 justify-center">
-            <span className="text-sm text-[#888]">Certificado SSL</span>
-            <span className="text-base text-[#ededed] font-medium truncate" title={osintData.ssl.issuer || 'Desconocido'}>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider">SSL</span>
+            <span className="text-sm text-zinc-200 font-medium truncate" title={osintData.ssl.issuer || 'Desconocido'}>
               {osintData.ssl.issuer || 'Desconocido'}
             </span>
           </div>

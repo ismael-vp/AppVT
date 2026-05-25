@@ -26,9 +26,9 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
 
   if (error) {
     return (
-      <div className="w-full max-w-2xl mx-auto mt-6 bg-black border border-red-900/50 p-4 rounded-lg flex items-start space-x-3">
-        <AlertTriangle className="text-red-600 mt-0.5 flex-shrink-0" size={18} />
-        <div className="text-sm text-red-500">
+      <div className="w-full max-w-2xl mx-auto mt-6 bg-[#0d0d0d] border border-red-900/30 p-4 rounded-xl flex items-start gap-3">
+        <AlertTriangle className="text-red-500/70 mt-0.5 shrink-0" size={16} />
+        <div className="text-sm text-red-400/80">
           {typeof error === 'string' ? error : JSON.stringify(error)}
         </div>
       </div>
@@ -76,7 +76,7 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
   return (
     <div className="w-full max-w-5xl mx-auto mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700 relative">
 
-      <div className="flex justify-end mb-4 gap-3">
+      <div className="flex justify-end mb-3 gap-2">
         {!isReadOnly && (
           <button
             onClick={async () => {
@@ -91,13 +91,12 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
                 useToastStore.getState().showToast(err instanceof Error ? err.message : 'Error al compartir enlace', 'error');
               }
             }}
-            className="flex items-center space-x-2 bg-indigo-600/10 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600/20 transition-colors text-xs font-medium py-1.5 px-3 rounded-md"
+            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-200 border border-zinc-800/60 hover:border-zinc-700 bg-[#0d0d0d] transition-colors text-xs font-medium py-1.5 px-3 rounded-lg"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-            <span>Compartir</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            Compartir
           </button>
         )}
-
         <button
           onClick={() => {
             if (isReadOnly) {
@@ -107,41 +106,35 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           }}
-          className="flex items-center space-x-2 bg-[#050505] text-[#888] border border-[#333] hover:text-white hover:bg-[#111] transition-colors text-xs font-medium py-1.5 px-3 rounded-md"
+          className="flex items-center gap-2 text-zinc-500 hover:text-zinc-200 border border-zinc-800/60 hover:border-zinc-700 bg-[#0d0d0d] transition-colors text-xs font-medium py-1.5 px-3 rounded-lg"
         >
-          <RotateCcw size={14} />
-          <span>Nuevo Análisis</span>
+          <RotateCcw size={13} />
+          Nuevo análisis
         </button>
       </div>
 
-      <div className="bg-black border border-[#333] rounded-lg overflow-hidden shadow-sm w-full">
-        <div className="flex overflow-x-auto overflow-y-hidden whitespace-nowrap border-b border-zinc-900 bg-zinc-950/50 px-4 sm:px-6 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          <button
-            onClick={() => setActiveTab('ai')}
-            className={`py-4 px-4 sm:px-6 text-sm sm:text-base font-semibold flex items-center transition-all relative ${activeTab === 'ai' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-          >
-            <span>Resumen</span>
-            {activeTab === 'ai' && <span className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white rounded-t-full animate-in fade-in duration-200"></span>}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('technical')}
-            className={`py-4 px-4 sm:px-6 text-sm sm:text-base font-semibold flex items-center transition-all relative ${activeTab === 'technical' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-          >
-            <span>Datos Técnicos</span>
-            {activeTab === 'technical' && <span className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white rounded-t-full animate-in fade-in duration-200"></span>}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('community')}
-            className={`py-4 px-4 sm:px-6 text-sm sm:text-base font-semibold flex items-center transition-all relative ${activeTab === 'community' ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-          >
-            <span>Comunidad</span>
-            {activeTab === 'community' && <span className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-white rounded-t-full animate-in fade-in duration-200"></span>}
-          </button>
+      <div className="bg-[#0d0d0d] border border-zinc-800/50 rounded-xl overflow-hidden w-full">
+        <div className="flex overflow-x-auto overflow-y-hidden whitespace-nowrap border-b border-zinc-800/50 px-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {(['ai', 'technical', 'community'] as const).map((tab) => {
+            const labels = { ai: 'Resumen', technical: 'Datos Técnicos', community: 'Comunidad' };
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`py-3.5 px-5 text-sm font-medium flex items-center transition-all relative whitespace-nowrap ${
+                  activeTab === tab ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {labels[tab]}
+                {activeTab === tab && (
+                  <span className="absolute bottom-0 left-0 w-full h-[2px] bg-white rounded-t-full" />
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        <div className="p-4 sm:p-8">
+        <div className="p-5 sm:p-8">
           {activeTab === 'ai' ? (
             <SummaryTab
               key={scanResult.resourceName}

@@ -25,7 +25,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (get().isInitialized) return;
     set({ isInitialized: true });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Session error during initialization:', error.message);
+        supabase.auth.signOut().catch(() => {});
+      }
       set({ session, user: session?.user || null });
       if (session?.user) {
         useThreatStore.getState().syncFromCloud();

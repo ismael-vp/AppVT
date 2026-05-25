@@ -16,33 +16,30 @@ const TechStackCard: React.FC<TechStackCardProps> = ({
       {/* Sección Scripts Externos */}
 
       {externalScripts && externalScripts.length > 0 && (
-        <div className="bg-black border border-[#333] rounded-lg p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <Shield size={20} className="text-[#888]" />
-            <h3 className="text-[#ededed] font-semibold text-lg">Scripts Externos Detectados</h3>
-          </div>
-          <div className="grid grid-cols-1 gap-3">
+        <div className="bg-[#0d0d0d] border border-zinc-800/50 rounded-xl p-5">
+          <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider mb-4">Scripts externos detectados</p>
+          <div className="grid grid-cols-1 gap-2">
             {externalScripts.map((script, index) => (
-              <div 
-                key={index} 
-                className="flex items-center justify-between p-3 bg-[#0a0a0a] border border-[#222] rounded-md group hover:border-[#333] transition-colors"
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 bg-[#080808] border border-zinc-800/50 rounded-lg group hover:border-zinc-700/60 transition-colors"
               >
-                <span className="text-xs font-mono text-[#888] truncate max-w-[80%]" title={script}>
+                <span className="text-xs font-mono text-zinc-500 truncate max-w-[80%]" title={script}>
                   {script}
                 </span>
                 {onExplainScript && (
                   <button
                     onClick={() => onExplainScript(script)}
-                    className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555] hover:text-[#ededed] transition-colors"
+                    className="text-[10px] font-medium uppercase tracking-wider text-zinc-600 hover:text-zinc-300 transition-colors"
                   >
-                    Analizar <ExternalLink size={10} />
+                    Analizar
                   </button>
                 )}
               </div>
             ))}
           </div>
-          <p className="mt-4 text-[11px] text-[#555] leading-relaxed italic">
-            * Estos scripts se cargan desde dominios de terceros. Algunos pueden ser analíticas o CDNs, pero otros podrían ser trackers o inyecciones maliciosas.
+          <p className="mt-3 text-[10px] text-zinc-600 leading-relaxed">
+            Scripts de terceros. Pueden ser trackers, CDNs o inyecciones maliciosas.
           </p>
         </div>
       )}

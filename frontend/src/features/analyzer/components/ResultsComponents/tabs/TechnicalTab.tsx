@@ -43,8 +43,8 @@ export default function TechnicalTab({ scanResult, isMalicious, onExplainScript 
       {/* Mapa de Geolocalización (Solo URLs) — carga diferida para no bloquear el render */}
       {type === 'url' && osint_data?.geolocation?.lat && osint_data?.geolocation?.lon && (
         <div>
-          <h4 className="text-[#ededed] text-xl font-medium mb-4">Geolocalización</h4>
-          <div className="h-96 sm:h-[500px] w-full mb-8">
+          <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider mb-4">Geolocalización</p>
+          <div className="h-80 sm:h-[420px] w-full mb-6">
             <ThreatMap
               lat={osint_data.geolocation.lat}
               lon={osint_data.geolocation.lon}

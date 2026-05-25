@@ -47,11 +47,7 @@ export default function SecureCaptureCard({ osintData, safeUrl }: SecureCaptureC
 
   return (
     <div className="animate-in fade-in duration-500">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="text-[#ededed] text-xl font-semibold flex items-center space-x-2">
-          <span>Captura del Sitio</span>
-        </h4>
-        
+      <div className="flex items-center justify-end mb-4">
         {/* Toggle Desktop / Mobile */}
         <div className="flex items-center p-1 bg-zinc-900 border border-zinc-800 rounded-md">
           <button

@@ -177,7 +177,7 @@ export default function BulkAnalyzer() {
     <div className="w-full max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
       {!started ? (
         <div className="space-y-6">
-          <div className="bg-[#050505] border border-zinc-800/80 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+          <div className="bg-[#0d0d0d] border border-zinc-800/60 rounded-xl p-5 shadow-sm relative overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-zinc-200 flex items-center gap-2">
                 Introduce las URLs
@@ -190,7 +190,7 @@ export default function BulkAnalyzer() {
                 value={rawText}
                 onChange={e => setRawText(e.target.value)}
                 placeholder={`https://ejemplo.com\nhttps://otro-sitio.net\nhttps://dominio-sospechoso.xyz\n...`}
-                className="w-full h-64 bg-[#0a0a0a] border border-zinc-800/60 rounded-xl p-5 text-sm text-zinc-300 placeholder-zinc-800 focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700/50 resize-none font-mono leading-relaxed transition-all scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"
+                className="w-full h-56 bg-[#0a0a0a] border border-zinc-800/60 rounded-xl p-5 text-sm text-zinc-300 placeholder-zinc-800 focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700/50 resize-none font-mono leading-relaxed transition-all scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"
               />
               
               <div className="absolute bottom-4 right-4">
@@ -229,28 +229,11 @@ export default function BulkAnalyzer() {
               </button>
             </div>
           </div>
-
-          {/* Info cards (Rediseñadas a una franja horizontal limpia) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-zinc-900 bg-zinc-950/50 border border-zinc-800/50 rounded-xl overflow-hidden">
-            {[
-              { icon: <FileText size={16} />, title: `Límite de ${MAX_URLS}`, desc: 'Para garantizar rendimiento' },
-              { icon: <Clock size={16} />, title: 'Análisis OSINT', desc: 'Recolección nativa de inteligencia' },
-              { icon: <Download size={16} />, title: 'Exportación', desc: 'Descarga un CSV al finalizar' },
-            ].map(item => (
-              <div key={item.title} className="p-5 flex items-start gap-4 hover:bg-zinc-900/20 transition-colors">
-                <div className="text-zinc-600 bg-zinc-900 p-2 rounded-lg shrink-0">{item.icon}</div>
-                <div>
-                  <p className="text-xs font-medium text-zinc-300">{item.title}</p>
-                  <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed">{item.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       ) : (
         <div className="space-y-4">
           {/* Stats + controles */}
-          <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
+          <div className="bg-[#0d0d0d] border border-zinc-800/60 rounded-xl p-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-6">
                 <div>
@@ -311,7 +294,7 @@ export default function BulkAnalyzer() {
           </div>
 
           {/* Tabla de resultados */}
-          <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+          <div className="bg-[#0d0d0d] border border-zinc-800/60 rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-900 text-[11px] text-zinc-400 uppercase tracking-wider">

@@ -263,10 +263,10 @@ export default function UserDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <div className="flex bg-[#0a0a0a] border border-zinc-800 rounded-lg p-0.5 text-xs">
-            <button onClick={() => setActiveTab('overview')} className={`px-4 py-2 rounded-md transition-all font-medium ${activeTab === 'overview' ? 'bg-[#222] text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>Estadísticas</button>
-            <button onClick={() => setActiveTab('logs')} className={`px-4 py-2 rounded-md transition-all font-medium ${activeTab === 'logs' ? 'bg-[#222] text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>Historial</button>
+          <button onClick={() => setActiveTab('overview')} className={`px-4 py-1.5 rounded-md transition-all text-sm font-medium ${activeTab === 'overview' ? 'bg-white text-black' : 'text-zinc-500 hover:text-zinc-300'}`}>Estadísticas</button>
+              <button onClick={() => setActiveTab('logs')} className={`px-4 py-1.5 rounded-md transition-all text-sm font-medium ${activeTab === 'logs' ? 'bg-white text-black' : 'text-zinc-500 hover:text-zinc-300'}`}>Historial</button>
           </div>
-          <button onClick={() => fetchData(true)} disabled={refreshing} className="flex items-center gap-2 text-xs text-zinc-400 hover:text-white bg-[#0a0a0a] hover:bg-[#111] border border-zinc-800 rounded-lg px-3 py-2 transition-colors disabled:opacity-50">
+          <button onClick={() => fetchData(true)} disabled={refreshing} className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-200 border border-zinc-800/60 hover:border-zinc-700 bg-[#0d0d0d] rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40">
             <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
             Actualizar
           </button>
@@ -277,22 +277,22 @@ export default function UserDashboard() {
         <>
           {/* ── KPIs ── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-5 flex flex-col justify-between">
+            <div className="bg-[#0d0d0d] border border-zinc-800/60 rounded-xl p-5 flex flex-col justify-between">
               <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Análisis Totales</p>
               <p className="text-3xl font-medium text-zinc-200">{metrics.total}</p>
             </div>
-            <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-5 flex flex-col justify-between">
+            <div className="bg-[#0d0d0d] border border-zinc-800/60 rounded-xl p-5 flex flex-col justify-between">
               <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Amenazas Detectadas</p>
               <div className="flex items-baseline gap-2">
                 <p className="text-3xl font-medium text-red-400">{metrics.maliciousCount}</p>
                 {metrics.total > 0 && <p className="text-xs text-zinc-500">({metrics.detectionRate}%)</p>}
               </div>
             </div>
-            <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-5 flex flex-col justify-between">
+            <div className="bg-[#0d0d0d] border border-zinc-800/60 rounded-xl p-5 flex flex-col justify-between">
               <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Seguros</p>
               <p className="text-3xl font-medium text-emerald-400">{metrics.harmlessCount}</p>
             </div>
-            <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-5 flex flex-col justify-between">
+            <div className="bg-[#0d0d0d] border border-zinc-800/60 rounded-xl p-5 flex flex-col justify-between">
               <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Riesgo Medio</p>
               <p className="text-3xl font-medium text-amber-400">{metrics.avgScore}<span className="text-sm text-zinc-600 font-normal ml-1">/100</span></p>
             </div>
@@ -301,7 +301,7 @@ export default function UserDashboard() {
           {/* ── Fila de gráficos principales ── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             {/* Actividad diaria */}
-            <div className="lg:col-span-2 bg-[#050505] border border-zinc-800/80 rounded-xl p-6">
+            <div className="lg:col-span-2 bg-[#0d0d0d] border border-zinc-800/60 rounded-xl p-6">
               <h3 className="text-xs font-medium text-zinc-400 mb-6 uppercase tracking-wider">Actividad Diaria</h3>
               <div className="w-full h-60">
                 {metrics.timelineArray.length > 0 ? (
@@ -332,7 +332,7 @@ export default function UserDashboard() {
             </div>
 
             {/* Distribución seguro/malicioso */}
-            <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-6">
+            <div className="bg-[#0d0d0d] border border-zinc-800/60 rounded-xl p-6">
               <h3 className="text-xs font-medium text-zinc-400 mb-6 uppercase tracking-wider">Distribución</h3>
               <div className="w-full h-60">
                 {metrics.total > 0 ? (
@@ -367,7 +367,7 @@ export default function UserDashboard() {
           {/* ── Fila inferior ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Marcas suplantadas */}
-            <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-6">
+            <div className="bg-[#0d0d0d] border border-zinc-800/60 rounded-xl p-6">
               <h3 className="text-xs font-medium text-zinc-400 mb-6 uppercase tracking-wider">Top Marcas Analizadas</h3>
               <div className="w-full h-48">
                 {metrics.brandArray.length > 0 ? (
@@ -387,7 +387,7 @@ export default function UserDashboard() {
             </div>
 
             {/* Top países */}
-            <div className="bg-[#050505] border border-zinc-800/80 rounded-xl p-6">
+            <div className="bg-[#0d0d0d] border border-zinc-800/60 rounded-xl p-6">
               <h3 className="text-xs font-medium text-zinc-400 mb-6 uppercase tracking-wider">Top Países Destino</h3>
               <div className="w-full h-48">
                 {metrics.countryArray.length > 0 ? (

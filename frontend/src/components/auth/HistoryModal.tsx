@@ -158,37 +158,32 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
         onClick={onClose}
       />
 
-      {/* Panel lateral derecho (Drawer) */}
-      <div 
-        className={`fixed inset-y-0 right-0 z-50 w-full max-w-md bg-[#0a0a0a] border-l border-zinc-800/50 shadow-2xl transition-transform duration-300 ease-in-out flex flex-col ${
+      {/* Panel lateral */}
+      <div
+        className={`fixed inset-y-0 right-0 z-50 w-full max-w-md bg-[#0a0a0a] border-l border-zinc-800/60 shadow-2xl transition-transform duration-300 ease-in-out flex flex-col ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        {/* Cabecera del Panel */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800/50">
-          <div className="flex items-center gap-2">
-            <Clock size={18} className="text-zinc-400" />
-            <h2 className="text-sm font-semibold text-zinc-100 tracking-wide uppercase">
-              Recientes
-            </h2>
-          </div>
-          <div className="flex items-center gap-2">
+        {/* Cabecera */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/50">
+          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Recientes</span>
+          <div className="flex items-center gap-1.5">
             {reports.length > 0 && (
               <button
                 onClick={handleClearAll}
-                className="text-[#888] hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-500/10 active:scale-95 mr-2"
-                title="Limpiar todo el historial"
+                className="text-zinc-600 hover:text-red-400 transition-colors p-1.5 rounded-md hover:bg-red-500/5"
+                title="Limpiar historial"
                 tabIndex={isOpen ? 0 : -1}
               >
-                <Trash2 size={16} />
+                <Trash2 size={14} />
               </button>
             )}
-            <button 
+            <button
               onClick={onClose}
-              className="text-zinc-500 hover:text-zinc-300 transition-all rounded-full p-1 hover:bg-zinc-800/50 active:scale-95"
+              className="text-zinc-600 hover:text-zinc-300 transition-colors rounded-md p-1.5 hover:bg-zinc-800/50"
               tabIndex={isOpen ? 0 : -1}
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
         </div>
@@ -212,20 +207,19 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
               <p className="text-zinc-500 text-sm mt-2">Tus análisis futuros aparecerán aquí.</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {reports.map((report) => {
-                // Determinar si es malicioso
-                const isMalicious = 
+                const isMalicious =
                   report.scan_data.stats && report.scan_data.stats.malicious > 0 ||
                   report.scan_data.image_analysis?.is_phishing ||
                   report.scan_data.osint_data?.heuristic_result?.risk_score && report.scan_data.osint_data.heuristic_result.risk_score >= 70;
 
                 const Icon = isMalicious ? ShieldAlert : ShieldCheck;
-                const iconColor = isMalicious ? 'text-red-500' : 'text-emerald-500';
-                const bgColor = isMalicious ? 'bg-red-500/10' : 'bg-emerald-500/10';
+                const iconColor = isMalicious ? 'text-red-500/80' : 'text-emerald-500/80';
+                const bgColor = isMalicious ? 'bg-red-500/8' : 'bg-emerald-500/8';
 
                 return (
-                  <div 
+                  <div
                     key={report.id}
                     onClick={() => {
                       const { setMode, setScanResult } = useThreatStore.getState();
@@ -235,31 +229,25 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
                       onClose();
                       router.push('/');
                     }}
-                    className="group flex flex-col p-4 rounded-xl border border-zinc-800/50 bg-[#111] hover:bg-[#1a1a1a] hover:border-zinc-700 transition-all cursor-pointer relative"
+                    className="group flex items-center gap-3 p-3.5 rounded-xl border border-zinc-800/40 bg-[#0f0f0f] hover:bg-[#141414] hover:border-zinc-700/50 transition-all cursor-pointer relative"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3 truncate pr-8">
-                        <div className={`p-2 rounded-lg shrink-0 ${bgColor}`}>
-                          <Icon size={16} className={iconColor} />
-                        </div>
-                        <div className="truncate">
-                          <p className="text-sm font-medium text-zinc-200 truncate" title={report.input_target}>
-                            {report.input_target}
-                          </p>
-                          <p className="text-xs text-zinc-400 mt-1">
-                            {formatTimeAgo(report.created_at)}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <button
-                        onClick={(e) => handleDelete(report.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all absolute right-4 top-4"
-                        title="Eliminar del historial"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                    <div className={`p-2 rounded-lg shrink-0 ${bgColor}`}>
+                      <Icon size={14} className={iconColor} />
                     </div>
+                    <div className="truncate flex-1 min-w-0">
+                      <p className="text-xs font-medium text-zinc-200 truncate" title={report.input_target}>
+                        {report.input_target}
+                      </p>
+                      <p className="text-[10px] text-zinc-600 mt-0.5">
+                        {formatTimeAgo(report.created_at)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={(e) => handleDelete(report.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all shrink-0"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
                 );
               })}

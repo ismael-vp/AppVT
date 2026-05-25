@@ -12,7 +12,7 @@ from utils.openai_client import get_openai_client
 
 logger = logging.getLogger(__name__)
 
-AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini")
+AI_MODEL = os.getenv("AI_MODEL", "gpt-5-mini")
 AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.2"))
 AI_MAX_TOKENS = int(os.getenv("AI_IMAGE_MAX_TOKENS", "400"))
 MAX_OCR_CHARS = int(os.getenv("MAX_OCR_CHARS", "3000"))
@@ -193,7 +193,7 @@ async def _api_call_with_retry(callable, max_retries: int = MAX_RETRIES):
             )
             is_connection_error = any(
                 indicator in error_str
-                for indicator in ["connection", "timeout", "network", "refused"]
+                for indicator in ["connection", "timeout", "network", "refused", "503", "502", "service_unavailable", "service unavailable"]
             )
             if (is_rate_limit or is_connection_error) and attempt < max_retries:
                 delay = RETRY_BASE_DELAY * (2 ** attempt)

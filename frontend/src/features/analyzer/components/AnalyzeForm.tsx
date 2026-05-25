@@ -244,154 +244,125 @@ function AnalyzeFormInner() {
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto bg-black border border-[#333] p-6 rounded-lg shadow-sm">
-      <div className="flex flex-wrap gap-2 sm:gap-6 border-b border-[#333] mb-8">
+    <div className="w-full max-w-5xl mx-auto">
+      {/* Tab switcher */}
+      <div className="flex gap-1 mb-3">
         <button
           type="button"
           onClick={() => setMode('url')}
-          className={`pb-3 text-sm font-medium transition-colors flex items-center space-x-2 relative ${mode === 'url' ? 'text-[#ededed]' : 'text-[#888] hover:text-[#ededed]'
-            }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            mode === 'url'
+              ? 'bg-white text-black'
+              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+          }`}
         >
-          <Link size={16} />
-          <span>Analizar URL</span>
-          {mode === 'url' && (
-            <span className="absolute bottom-[-1px] left-0 w-full h-[1px] bg-white"></span>
-          )}
+          <Link size={14} />
+          URL
         </button>
-
         <button
           type="button"
           onClick={() => setMode('image')}
-          className={`pb-3 text-sm font-medium transition-colors flex items-center space-x-2 relative ${mode === 'image' ? 'text-[#ededed]' : 'text-[#888] hover:text-[#ededed]'
-            }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            mode === 'image'
+              ? 'bg-white text-black'
+              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+          }`}
         >
-          <ScanLine size={16} />
-          <span>Analizar imagen</span>
-          {mode === 'image' && (
-            <span className="absolute bottom-[-1px] left-0 w-full h-[1px] bg-white"></span>
-          )}
+          <ScanLine size={14} />
+          Imagen
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {mode === 'url' ? (
-          <div className="space-y-2">
-            <label htmlFor="url" className="text-sm text-[#ededed] font-medium block">
-              Enlace a analizar
-            </label>
+      {/* Form card */}
+      <div className="bg-[#0d0d0d] border border-zinc-800/50 rounded-xl p-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {mode === 'url' ? (
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search size={16} className="text-[#888]" />
-              </div>
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
               <input
                 id="url"
                 type="text"
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 placeholder="https://pagina-peligrosa.com"
-                className="w-full bg-black border border-[#333] text-[#ededed] placeholder-[#888] text-sm rounded-md py-3 pl-10 pr-10 focus:outline-none focus:ring-1 focus:ring-white transition-shadow"
+                className="w-full bg-[#080808] border border-zinc-800/80 text-zinc-200 placeholder-zinc-700 text-sm rounded-lg py-3.5 pl-10 pr-10 focus:outline-none focus:border-zinc-600 transition-colors"
                 disabled={isScanning}
+                autoComplete="off"
               />
               <button
                 type="button"
                 onClick={() => setUrlInput('')}
-                className={`absolute inset-y-0 right-0 pr-3 flex items-center text-[#666] hover:text-white transition-colors ${urlInput && !isScanning ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                className={`absolute inset-y-0 right-0 pr-3.5 flex items-center text-zinc-600 hover:text-zinc-300 transition-colors ${urlInput && !isScanning ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <label className="text-sm text-[#ededed] font-medium block">
-              Captura de pantalla
-            </label>
-            <p className="text-xs text-[#888] mb-3">
-              Sube una captura de un SMS, email o página web. Extraeremos el texto para comprobar si es seguro.
-            </p>
-            <div className="flex items-center justify-center w-full">
+          ) : (
+            <div>
               <label
                 htmlFor="dropzone-image"
-                className="flex flex-col items-center justify-center w-full h-40 border border-[#333] border-dashed rounded-md cursor-pointer bg-black hover:bg-[#111] transition-colors"
+                className="flex flex-col items-center justify-center w-full h-36 border border-zinc-800/80 border-dashed rounded-lg cursor-pointer bg-[#080808] hover:bg-zinc-900/50 transition-colors"
               >
                 {previewUrl ? (
                   <div className="relative w-full h-full">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={previewUrl}
-                      alt="Vista previa"
-                      className="w-full h-full object-contain rounded-md p-2"
-                    />
+                    <img src={previewUrl} alt="Vista previa" className="w-full h-full object-contain p-2" />
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setImageInput(null);
-                      }}
-                      className="absolute top-2 right-2 flex items-center space-x-1 text-xs text-red-400 hover:text-red-300 bg-black/80 border border-red-900/50 px-2 py-1 rounded transition-colors"
+                      onClick={(e) => { e.preventDefault(); setImageInput(null); }}
+                      className="absolute top-2 right-2 text-xs text-zinc-400 hover:text-white bg-zinc-900/90 border border-zinc-700 px-2 py-1 rounded flex items-center gap-1 transition-colors"
                     >
-                      <Trash2 size={12} />
-                      <span>Eliminar</span>
+                      <Trash2 size={11} />
+                      Quitar
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <ScanLine size={24} className="mb-2 text-[#888]" />
-                    <p className="mb-1 text-sm text-[#ededed]">
-                      <span className="font-semibold">Haz clic para subir</span> o arrastra aquí
-                    </p>
-                    <p className="text-xs text-[#888]">JPG, PNG, WEBP — Máx. 10MB</p>
+                  <div className="flex flex-col items-center gap-2 text-zinc-600">
+                    <ScanLine size={22} />
+                    <p className="text-xs">Arrastra o haz clic — JPG, PNG, WEBP</p>
                   </div>
                 )}
-                <input
-                  id="dropzone-image"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
+                <input id="dropzone-image" type="file" accept="image/*" className="hidden"
                   onChange={(e) => setImageInput(e.target.files ? e.target.files[0] : null)}
                   disabled={isScanning}
                 />
               </label>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="pt-2">
           <button
             type="submit"
             disabled={isScanning || (mode === 'url' ? !urlInput : !imageInput)}
-            className={`w-full flex items-center justify-center space-x-2 bg-white text-black font-medium py-3 rounded-md text-sm transition-all hover:bg-zinc-200 disabled:bg-zinc-900 disabled:text-zinc-500 relative ${isScanning ? 'cursor-wait' : 'disabled:cursor-not-allowed'}`}
+            className={`w-full flex items-center justify-center gap-3 font-medium py-3 rounded-lg text-sm transition-all ${
+              isScanning
+                ? 'bg-zinc-900 text-zinc-500 cursor-wait'
+                : (mode === 'url' ? !urlInput : !imageInput)
+                ? 'bg-zinc-900/60 text-zinc-600 cursor-not-allowed'
+                : 'bg-white text-black hover:bg-zinc-100 active:scale-[0.99]'
+            }`}
           >
-            <div className={`flex items-center space-x-3 ${isScanning ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'}`}>
-              <div className="flex space-x-1.5">
-                <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-dot-jump"></div>
-                <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-dot-jump delay-200"></div>
-                <div className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-dot-jump delay-400"></div>
-              </div>
-              <span className="text-zinc-400 font-normal">Analizando</span>
-            </div>
-            <span className={`${!isScanning ? 'opacity-100' : 'opacity-0 absolute'}`}>
-              {mode === 'image' ? 'Analizar imagen' : 'Iniciar análisis'}
-            </span>
+            {isScanning ? (
+              <>
+                <div className="flex gap-1">
+                  <div className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-dot-jump" />
+                  <div className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-dot-jump delay-200" />
+                  <div className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-dot-jump delay-400" />
+                </div>
+                <span className="text-zinc-500">{loadingMessage}</span>
+              </>
+            ) : (
+              mode === 'image' ? 'Analizar imagen' : 'Analizar'
+            )}
           </button>
-
-          <div className="relative mt-4 h-6">
-            <p className={`text-center text-[10px] text-zinc-600 uppercase tracking-widest animate-pulse absolute w-full transition-opacity ${isScanning ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-              {loadingMessage}
-            </p>
-            <p className={`text-center text-xs text-zinc-500 absolute w-full transition-opacity ${!isScanning ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-              Introduce la URL para iniciar el análisis automático.
-            </p>
-          </div>
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }
 
 export default function AnalyzeForm() {
   return (
-    <Suspense fallback={<div className="w-full max-w-5xl mx-auto bg-black border border-[#333] p-6 rounded-lg shadow-sm text-center text-[#888]">Cargando...</div>}>
+    <Suspense fallback={<div className="w-full max-w-5xl mx-auto bg-[#0d0d0d] border border-zinc-800/50 p-5 rounded-xl" />}>
       <AnalyzeFormInner />
     </Suspense>
   );

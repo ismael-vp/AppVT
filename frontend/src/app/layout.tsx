@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 import type { Viewport } from "next";
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#080808",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -48,7 +48,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col" suppressHydrationWarning>
+      <body className="min-h-full flex flex-col bg-[#080808]" suppressHydrationWarning>
         <script
           dangerouslySetInnerHTML={{
             __html: `
