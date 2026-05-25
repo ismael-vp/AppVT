@@ -36,6 +36,8 @@ import { ClientAuthProvider } from "@/components/auth/ClientAuthProvider";
 import ToastContainer from "@/components/ui/ToastContainer";
 import { Header } from "@/components/ui/Header";
 
+import { GoogleAnalytics } from '@next/third-parties/google';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -49,6 +51,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[#080808]" suppressHydrationWarning>
+        {process.env.NEXT_PUBLIC_GA_ID && <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />}
         <script
           dangerouslySetInnerHTML={{
             __html: `
