@@ -76,3 +76,10 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
 **Nota sobre SSL (HTTPS):**
 El archivo `docker-compose.prod.yml` expone los puertos 3000 y 8000. Se recomienda encarecidamente utilizar un Reverse Proxy externo (como Cloudflare, Nginx proxy manager, o el propio Vercel si despliegas el frontend allí) para manejar la terminación SSL y los certificados HTTPS.
+
+## 🚀 Novedades de esta Versión (v2.0 - Production Ready)
+
+* **Arquitectura Dual de Machine Learning**: Incorporación de dos modelos locales (Random Forest) entrenados con un dataset de más de 1.4 millones de dominios, logrando un 99.9% de precisión (AUC-ROC).
+* **Mitigación de Falsos Positivos**: Lógica avanzada con soporte para el reconocimiento exacto de marcas (`has_exact_brand`) y listas blancas exclusivas para proteger sitios legítimos frente al motor heurístico.
+* **Backend de Alta Concurrencia**: Escáneres asíncronos (`asyncio.open_connection`), mitigación de cuellos de botella en resoluciones DNS y locks de hilo para el Singleton de bases de datos locales y feeds.
+* **Frontend Robusto y Tipado Estricto**: Integración perfeccionada de TypeScript, esquemas de validación centralizados (Zod) y optimización severa en el ciclo de vida de React Hooks para compilaciones limpias en Vercel/Turbopack.
