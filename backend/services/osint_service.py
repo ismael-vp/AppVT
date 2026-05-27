@@ -157,7 +157,7 @@ class OSINTService:
                                 bot_tokens = bot_title_clean.split()
                                 real_tokens = real_title_clean.split()
                                 if not (bot_tokens and real_tokens and bot_tokens[0] == real_tokens[0]):
-                                    osint_data.cloaking_detected = True
+                                    pass
                 else:
                     logger.warning(f"Microlink falló con status {response.status_code} para {url}")
         except Exception as e:

@@ -331,9 +331,7 @@ async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = B
             final_score = min(100, final_score + 25)
             heuristic_reasons.append("Formulario de login sospechoso o redirección ofuscada")
 
-        if getattr(osint_data, "cloaking_detected", False):
-            final_score = min(100, final_score + 40)
-            heuristic_reasons.append("Detección de Cloaking (contenido engañoso para bots)")
+
 
         dns_data = getattr(osint_data, "dns", None)
         if dns_data and not getattr(dns_data, "has_mx", False) and final_score > 0:
