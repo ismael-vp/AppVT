@@ -1,8 +1,8 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from urllib.parse import urlparse
 from typing import Any
+from urllib.parse import urlparse
 
 import tldextract
 
@@ -13,7 +13,7 @@ from models.osint_models import (
 )
 from services.scanners.typosquatting_scanner import TyposquattingScanner
 from services.scanners.url_structure_analyzer import URLStructureAnalyzer
-from services.utils import calculate_risk_level, TARGET_BRANDS
+from services.utils import TARGET_BRANDS, calculate_risk_level
 
 # Mapa de ownership legítimo de marca:
 # clave   = nombre de marca (lowercase, igual que en TARGET_BRANDS)
@@ -175,7 +175,7 @@ class HeuristicScanner:
             # y generan falsos positivos inaceptables sin aportar valor real por sí solos.
             if osint_data.tech_data.is_obfuscated_js:
                 logger.debug(f"Ofuscación JS detectada en {extracted_hostname} - ignorado para puntaje heurístico")
-            
+
             if osint_data.tech_data.anti_bot_detected:
                 logger.debug(f"Anti-Bot detectado en {extracted_hostname} - ignorado para puntaje heurístico")
 

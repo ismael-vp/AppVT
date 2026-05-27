@@ -1,6 +1,6 @@
-import re
 import math
 from urllib.parse import urlparse
+
 import Levenshtein
 
 # Marcas objetivo (amplía según necesites)
@@ -65,14 +65,14 @@ def extract_advanced_features(url: str) -> list:
 
         # Similitud con marcas (distancia de Levenshtein normalizada)
         domain_name = domain.split('.')[0]   # solo el SLD, ej: "n3tflix" o "www" (se ajusta fácil luego)
-        
+
         # Mejor extraer el dominio base ignorando el www.
         domain_parts = domain.split('.')
         if len(domain_parts) >= 2:
             domain_name = domain_parts[-2] # Ej: www.netflix.com -> netflix
         else:
             domain_name = domain_parts[0]
-            
+
         min_dist = 1.0
         for brand in BRANDS:
             dist = Levenshtein.distance(domain_name, brand)
@@ -84,7 +84,7 @@ def extract_advanced_features(url: str) -> list:
         # ¿Hay un typo cercano a alguna marca? (umbral 0.2)
         # Si la distancia es mayor que 0 (no es la marca exacta) pero menor a 0.2 (es un typo como n3tflix)
         has_brand_typo = int(0 < brand_distance < 0.2)
-        
+
         # NUEVO: coincidencia exacta (distancia == 0)
         has_exact_brand = int(brand_distance == 0.0)
 

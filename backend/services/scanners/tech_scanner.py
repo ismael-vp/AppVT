@@ -2,11 +2,11 @@ import asyncio
 import logging
 import os
 import re
+import warnings
 from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
-import warnings
 
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
@@ -17,11 +17,27 @@ logger = logging.getLogger(__name__)
 
 MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
 MAX_HTML_FOR_MODEL = 200_000
-HTTP_TIMEOUT = 10.0
+HTTP_TIMEOUT = 20.0
 USER_AGENT = os.getenv(
     "TECH_SCANNER_USER_AGENT",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
+
+# Cabeceras completas de navegador para evitar bloqueos por detección de bots
+# (YouTube, Google y otros grandes sitios filtran requests sin Accept-Language, etc.)
+BROWSER_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Upgrade-Insecure-Requests": "1",
+}
+
 
 TRACKER_PATTERNS: list[tuple[str, list[str]]] = [
     ("doubleclick.net", ["Cookies de Terceros", "Rastreo Publicitario"]),
@@ -269,9 +285,8 @@ class TechScanner:
             logger.warning(f"Intento de SSRF bloqueado: {url}")
             return result
 
-        req_headers = {"User-Agent": USER_AGENT}
         try:
-            async with httpx.AsyncClient(verify=True, follow_redirects=False, timeout=HTTP_TIMEOUT, headers=req_headers) as client:
+            async with httpx.AsyncClient(verify=True, follow_redirects=False, timeout=HTTP_TIMEOUT, headers=BROWSER_HEADERS) as client:
                 current_url = url
                 redirect_chain: list[str] = [current_url]
                 max_redirects = 10

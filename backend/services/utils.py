@@ -6,12 +6,10 @@ import json
 import logging
 import math
 import os
-import re
 import socket
 from collections import Counter
 from typing import Any
 from urllib.parse import urlparse
-from functools import lru_cache
 
 import filetype
 import httpx
@@ -25,7 +23,7 @@ def _load_target_brands() -> list[tuple[str, set[str], set[str]]]:
         # Resolves to backend/data/brands.json
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         json_path = os.path.join(base_dir, "data", "brands.json")
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             data = json.load(f)
             for brand in data.get("brands", []):
                 name = brand.get("name", "")

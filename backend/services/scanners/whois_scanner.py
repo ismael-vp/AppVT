@@ -5,6 +5,7 @@ import os
 import re
 from datetime import datetime, timezone
 
+import httpx
 import whois
 
 from models.osint_models import WhoisData
@@ -147,6 +148,68 @@ def _is_data_incomplete(domain_info) -> bool:
 
     return not has_any_data
 
+async def _fetch_rdap(hostname: str) -> WhoisData | None:
+    """
+    Obtiene datos de registro de dominio via RDAP (HTTPS, puerto 443).
+    RDAP es el sucesor moderno de WHOIS — funciona en entornos con el puerto 43 bloqueado
+    (p.ej. Hugging Face Free Tier, algunos VPS).
+    Documentación: https://rdap.org
+    """
+    # Extraer el dominio raíz (sin subdominios) para RDAP
+    import tldextract
+    extracted = tldextract.extract(hostname)
+    root_domain = f"{extracted.domain}.{extracted.suffix}" if extracted.suffix else hostname
+
+    rdap_url = f"https://rdap.org/domain/{root_domain}"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.get(rdap_url, follow_redirects=True)
+            if response.status_code != 200:
+                logger.debug(f"RDAP: status {response.status_code} para {root_domain}")
+                return None
+
+            data = response.json()
+
+            # Extraer registrar
+            registrar = None
+            for entity in data.get("entities", []):
+                roles = entity.get("roles", [])
+                if "registrar" in roles:
+                    vcard = entity.get("vcardArray", [])
+                    if vcard and len(vcard) > 1:
+                        for field in vcard[1]:
+                            if field[0] == "fn":
+                                registrar = field[3]
+                                break
+                    break
+
+            # Extraer fechas de eventos
+            creation_date = None
+            expiration_date = None
+            for event in data.get("events", []):
+                action = event.get("eventAction", "")
+                date_str = event.get("eventDate", "")
+                if action == "registration" and date_str:
+                    creation_date = _parse_whois_date(date_str)
+                elif action == "expiration" and date_str:
+                    expiration_date = _parse_whois_date(date_str)
+
+            if not registrar and not creation_date and not expiration_date:
+                return None
+
+            logger.info(f"✅ RDAP: datos obtenidos para {root_domain} (registrar={registrar}, creación={creation_date})")
+            return WhoisData(
+                registrar=registrar,
+                creation_date=creation_date,
+                expiration_date=expiration_date
+            )
+
+    except Exception as exc:
+        logger.debug(f"RDAP error para {root_domain}: {exc}")
+        return None
+
+
+
 class WhoisScanner:
     """Escáner de registros WHOIS."""
 
@@ -159,6 +222,16 @@ class WhoisScanner:
             logger.warning(f"Validación rechazada: {exc}")
             return None
 
+        try:
+            # ── RDAP (HTTPS, funciona en entornos restringidos como Hugging Face) ──
+            # RDAP es el sucesor moderno de WHOIS, usa puerto 443 (no el 43 que bloquean)
+            rdap_data = await _fetch_rdap(safe_hostname)
+            if rdap_data:
+                return rdap_data
+        except Exception as exc:
+            logger.debug(f"RDAP falló para {safe_hostname}, intentando python-whois: {exc}")
+
+        # ── Fallback: python-whois clásico (puerto 43 TCP) ──
         try:
             domain_info = await asyncio.wait_for(
                 asyncio.to_thread(whois.whois, safe_hostname),

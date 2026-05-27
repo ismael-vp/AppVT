@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Body,
     Depends,
     File,
@@ -18,12 +19,13 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field, field_validator
 
+from config import settings
 from services.ai_service import AIService
 from services.image_phishing_service import ImagePhishingService
+from services.organic_dataset_service import OrganicDatasetService
 from services.osint_service import OSINTService
 from services.utils import is_safe_url_async
 from utils.cache_service import CacheService
-from config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -250,7 +252,7 @@ class ScriptExplainRequest(BaseModel):
     "/analyze/url",
     dependencies=[Depends(rate_limit_dependency)]
 )
-async def analyze_url(request: URLRequest = Body(...)):  # noqa: B008
+async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = Body(...)):  # noqa: B008
     """Analiza una URL en busca de phishing, malware y anomalías."""
     try:
         # Comprobación SSRF async (DNS no bloqueante) — aquí, no en el validador Pydantic
@@ -292,104 +294,72 @@ async def analyze_url(request: URLRequest = Body(...)):  # noqa: B008
         # Simulamos vt_stats para mantener compatibilidad con el frontend
         vt_stats = {"malicious": 0, "suspicious": 0, "harmless": 1, "undetected": 0, "timeout": 0}
 
-        # Heurística OSINT
-        heuristic_reasons = []
-        malicious_score = 0
-        suspicious_score = 0
+        # ── SISTEMA DE PUNTUACIÓN UNIFICADO ──────────────────────────────────
+        # Usamos el risk_score del motor heurístico (0-100) que ya integra ML
+        final_score = getattr(osint_data.heuristic_result, "risk_score", 0) if osint_data.heuristic_result else 0
+        heuristic_reasons = getattr(osint_data.heuristic_result, "flags", []) if osint_data.heuristic_result else []
 
-        # ── TIER 0a: DNS Blacklists (Spamhaus DBL + SURBL) ─────────────────────
+        # Integrar detectores externos y de osint_service al score final (0-100)
         dns_data_r = getattr(osint_data, "dns", None)
-        if dns_data_r:
-            if getattr(dns_data_r, "spamhaus_listed", False) or getattr(dns_data_r, "surbl_listed", False):
-                malicious_score += 2
-                details = getattr(dns_data_r, "blacklist_details", [])
-                detail_str = " | ".join(details) if details else "Spamhaus DBL / SURBL"
-                heuristic_reasons.append(f"🚫 Dominio en lista negra DNS: {detail_str}")
+        if dns_data_r and (getattr(dns_data_r, "spamhaus_listed", False) or getattr(dns_data_r, "surbl_listed", False)):
+            final_score = max(final_score, 95)
+            details = getattr(dns_data_r, "blacklist_details", [])
+            detail_str = " | ".join(details) if details else "Spamhaus DBL / SURBL"
+            heuristic_reasons.append(f"🚫 Dominio en lista negra DNS: {detail_str}")
 
-        # ── TIER 0b: Feeds locales de phishing (OpenPhish / PhishTank) ─────────
         if getattr(osint_data, "feed_detected", False):
-            malicious_score += 2
+            final_score = max(final_score, 100)
             source = getattr(osint_data, "feed_source", "feed local") or "feed local"
             heuristic_reasons.append(f"🎣 URL en feed de phishing conocido ({source})")
 
-        # ── TIER 1: Google Safe Browsing ────────────────────────────────────────
         if getattr(osint_data, "safe_browsing_threat", False):
-            malicious_score += 3
+            final_score = max(final_score, 100)
             types = getattr(osint_data, "safe_browsing_types", [])
             types_str = ", ".join(types) if types else "amenaza detectada"
             heuristic_reasons.append(f"⚠️ Google Safe Browsing: {types_str}")
 
-
         abuse_score = getattr(osint_data, "abuse_confidence_score", None)
         if abuse_score is not None and abuse_score > 0:
             if abuse_score >= 50:
-                malicious_score += 1
+                final_score = min(100, final_score + 30)
                 heuristic_reasons.append(f"Alta probabilidad de abuso reportada ({abuse_score}% de confianza)")
             elif abuse_score >= 10:
-                suspicious_score += 1
+                final_score = min(100, final_score + 15)
                 heuristic_reasons.append(f"Actividad sospechosa reportada ({abuse_score}% de confianza)")
 
-        if getattr(osint_data, "is_typosquatting", False):
-            malicious_score += 1
-            heuristic_reasons.append("Posible Typosquatting detectado")
-
         if getattr(osint_data, "has_dangerous_form", False):
-            malicious_score += 1
+            final_score = min(100, final_score + 25)
             heuristic_reasons.append("Formulario de login sospechoso o redirección ofuscada")
 
         if getattr(osint_data, "cloaking_detected", False):
-            malicious_score += 1
+            final_score = min(100, final_score + 40)
             heuristic_reasons.append("Detección de Cloaking (contenido engañoso para bots)")
 
-        url_struct = getattr(osint_data, "url_structure", None)
-        if url_struct and getattr(url_struct, "risk_score", 0) >= 60:
-            suspicious_score += 1
-            heuristic_reasons.append(
-                f"Estructura de URL dudosa (Score: {url_struct.risk_score}/100)"
-            )
-        
-        # Verificamos si WHOIS marcó riesgo (dominio reciente < 30 días)
-        whois_data = getattr(osint_data, "whois", None)
-        if whois_data and getattr(whois_data, "creation_date", None):
-            from datetime import datetime, timezone
-            try:
-                creation_dt = datetime.fromisoformat(whois_data.creation_date.replace("Z", "+00:00"))
-                now = datetime.now(timezone.utc)
-                if (now - creation_dt).days < 30:
-                    suspicious_score += 1
-                    heuristic_reasons.append("Dominio de muy reciente creación (< 30 días)")
-            except Exception:
-                pass
-        
-        # Verificamos DNS (Ausencia de MX puede ser sospechoso en sitios de phishing)
         dns_data = getattr(osint_data, "dns", None)
-        if dns_data and not getattr(dns_data, "has_mx", False):
-            if suspicious_score > 0 or malicious_score > 0:
-                suspicious_score += 1
-                heuristic_reasons.append("Dominio sin servidores de correo (MX) configurados")
-        
-        # Verificamos si SSL marcó riesgo
-        ssl_data = getattr(osint_data, "ssl", None)
-        if ssl_data and getattr(ssl_data, "is_suspicious", False):
-            suspicious_score += 1
-            heuristic_reasons.append("Certificado SSL dudoso o autofirmado")
+        if dns_data and not getattr(dns_data, "has_mx", False) and final_score > 0:
+            final_score = min(100, final_score + 10)
+            heuristic_reasons.append("Dominio sin servidores de correo (MX) configurados")
 
-        # ── TIER 2: MACHINE LEARNING (Deep AI Detection) ──────────────────────────
-        heuristic_res = getattr(osint_data, "heuristic_result", None)
-        if heuristic_res and hasattr(heuristic_res, "flags"):
-            for flag in heuristic_res.flags:
-                if "ML_OSINT_CRITICAL" in flag or "ML_STRUCTURE_CRITICAL" in flag:
-                    malicious_score += 4
-                    heuristic_reasons.append(f"🤖 IA Crítica: {flag}")
-                elif "ML_OSINT_HIGH" in flag or "ML_STRUCTURE_HIGH" in flag:
-                    suspicious_score += 2
-                    heuristic_reasons.append(f"🤖 IA Sospechosa: {flag}")
+        # Actualizamos el nivel según el nuevo score unificado
+        from services.utils import calculate_risk_level
+        if osint_data.heuristic_result:
+            osint_data.heuristic_result.risk_score = final_score
+            osint_data.heuristic_result.level = calculate_risk_level(final_score)
+            # Evitamos duplicados en flags manteniendo el orden
+            seen = set()
+            osint_data.heuristic_result.flags = [x for x in heuristic_reasons if not (x in seen or seen.add(x))]
 
-        if malicious_score > 0 or suspicious_score > 0:
-            vt_stats["malicious"] = malicious_score
-            vt_stats["suspicious"] = suspicious_score
-            vt_stats["harmless"] = 0
-            vt_stats["heuristic_flag"] = " | ".join(heuristic_reasons)
+        # Convertir a vt_stats normalizado (0 o 1) para el frontend
+        is_malicious = final_score >= 50
+        is_suspicious = 25 <= final_score < 50
+        vt_stats = {
+            "malicious": 1 if is_malicious else 0,
+            "suspicious": 1 if is_suspicious else 0,
+            "harmless": 1 if not (is_malicious or is_suspicious) else 0,
+            "undetected": 0,
+            "timeout": 0,
+            "heuristic_flag": " | ".join(heuristic_reasons)
+        }
 
         # Serializar una única vez — reutilizado para IA y para la respuesta JSON
         serialized_osint = _serialize_osint(osint_data)
@@ -410,6 +380,14 @@ async def analyze_url(request: URLRequest = Body(...)):  # noqa: B008
 
         if not has_errors:
             cache_service.set(url_cache_key, result, "url")
+
+            # Guardamos la muestra orgánica OSINT (en segundo plano)
+            background_tasks.add_task(
+                OrganicDatasetService.save_organic_sample,
+                request.url,
+                osint_data,
+                is_malicious
+            )
 
         return result
 
@@ -562,10 +540,10 @@ class ModerateCommentRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=1000)
 
 @router.post(
-    "/moderate-comment",
+    "/moderate/comment",
     dependencies=[Depends(rate_limit_dependency)]
 )
-async def moderate_comment_endpoint(request: ModerateCommentRequest = Body(...)):
+async def moderate_comment_endpoint(request: ModerateCommentRequest = Body(...)):  # noqa: B008
     """Evalúa si un comentario aporta valor técnico o es irrelevante."""
     try:
         result = await ai_service.moderate_comment(request.content)

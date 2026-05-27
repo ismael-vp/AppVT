@@ -5,15 +5,15 @@ Prueba del modelo OSINT sobre una URL real.
 Uso: python test_osint_ml.py <URL>
 """
 
-import sys
-import os
 import asyncio
 import logging
+import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.osint_service import OSINTService
 from services.ml_analyzer import analyze_osint_with_ml
+from services.osint_service import OSINTService
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

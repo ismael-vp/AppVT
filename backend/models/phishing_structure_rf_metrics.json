@@ -3,40 +3,40 @@
   "train_samples": 1120000,
   "test_samples": 280000,
   "best_params": {
-    "n_estimators": 250,
-    "min_samples_split": 10,
-    "min_samples_leaf": 4,
-    "max_depth": 25
+    "num_leaves": 127,
+    "n_estimators": 150,
+    "max_depth": 15,
+    "learning_rate": 0.1
   },
-  "test_accuracy": 0.9906571428571429,
-  "test_f1": 0.9906436429705718,
-  "test_precision": 0.9920771368807129,
-  "test_recall": 0.9892142857142857,
-  "test_auc": 0.9994318206377552,
+  "test_accuracy": 0.9921071428571429,
+  "test_f1": 0.9921044358065623,
+  "test_precision": 0.9924448193046661,
+  "test_recall": 0.9917642857142858,
+  "test_auc": 0.9995846026530611,
   "confusion_matrix_normalized": [
     [
-      0.9921,
-      0.0079
+      0.99245,
+      0.00755
     ],
     [
-      0.010785714285714286,
-      0.9892142857142857
+      0.008235714285714285,
+      0.9917642857142858
     ]
   ],
   "feature_importances": {
-    "url_len": 0.0940946178457809,
-    "domain_len": 0.1719202514877805,
-    "path_len": 0.10939093060815447,
-    "dots_count": 0.10783826739300882,
-    "hyphens_count": 0.045101753713519606,
-    "has_numbers": 0.01932669401910917,
-    "entropy": 0.03685125545176613,
-    "has_keywords": 0.011407208578243688,
-    "suspicious_tld": 0.006142935155792642,
-    "domain_digit_ratio": 0.04941241888533869,
-    "tld_risk_score": 0.005922165417191283,
-    "brand_distance": 0.18573368733159684,
-    "has_brand_typo": 5.448660445080002e-05,
-    "has_exact_brand": 0.15680332750826642
+    "entropy": 3840.0,
+    "path_len": 3452.0,
+    "url_len": 3103.0,
+    "brand_distance": 3026.0,
+    "domain_len": 2878.0,
+    "dots_count": 688.0,
+    "has_numbers": 662.0,
+    "has_keywords": 566.0,
+    "hyphens_count": 250.0,
+    "domain_digit_ratio": 231.0,
+    "suspicious_tld": 171.0,
+    "has_exact_brand": 24.0,
+    "tld_risk_score": 9.0,
+    "has_brand_typo": 0.0
   }
 }

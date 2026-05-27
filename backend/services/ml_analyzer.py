@@ -1,15 +1,14 @@
-import math
-import re
 import logging
-from collections import Counter
-import joblib
+import math
 import os
-from urllib.parse import urlparse
+import re
+from collections import Counter
 from datetime import datetime, timezone
+
+import joblib
 import pandas as pd
 
 from models.osint_models import OSINTResponse
-from services.utils import calculate_risk_level
 from services.advanced_features import extract_advanced_features
 
 logger = logging.getLogger(__name__)
@@ -110,7 +109,7 @@ def extract_osint_features_from_response(url: str, response: OSINTResponse) -> l
     try:
         is_obfuscated = 1.0 if (response and response.tech_data and response.tech_data.is_obfuscated_js) else 0.0
     except Exception:
-        is_obfuscated = 1.0  # en caso de duda, considerar que puede estar ofuscado
+        is_obfuscated = 0.0  # si no hay datos, NO asumir que está ofuscado (evita falsos positivos)
 
     # Trackers
     try:
@@ -130,10 +129,10 @@ def analyze_structure_with_ml(url: str) -> dict:
     model = load_structure_model()
     if not model:
         return {"ml_score": 0, "flags": []}
-    
+
     try:
         feature_names = [
-            "url_len", "domain_len", "path_len", "dots_count", "hyphens_count", 
+            "url_len", "domain_len", "path_len", "dots_count", "hyphens_count",
             "has_numbers", "entropy", "has_keywords", "suspicious_tld",
             "domain_digit_ratio", "tld_risk_score", "brand_distance", "has_brand_typo",
             "has_exact_brand"
@@ -141,17 +140,17 @@ def analyze_structure_with_ml(url: str) -> dict:
         features = extract_advanced_features(url)
         if not features:
             return {"ml_score": 0, "flags": []}
-            
+
         features_df = pd.DataFrame([features], columns=feature_names)
         prob = model.predict_proba(features_df)[0][1]
         score = int(prob * 100)
-        
+
         flags = []
         if score >= 80:
             flags.append(f"ML_STRUCTURE_CRITICAL (Prob: {prob:.2f})")
         elif score >= 50:
             flags.append(f"ML_STRUCTURE_HIGH (Prob: {prob:.2f})")
-            
+
         return {"ml_score": score, "flags": flags}
     except Exception as e:
         logger.error(f"Error inferencia ML Estructural: {e}")
@@ -162,26 +161,41 @@ def analyze_osint_with_ml(url: str, osint_data: OSINTResponse) -> dict:
     model = load_osint_model()
     if not model:
         return {"ml_score": 0, "flags": []}
-        
+
+    # ── Guardia de calidad de datos ──────────────────────────────────────────
+    # Si tanto SSL como WHOIS son None, significa que ambos scanners fallaron
+    # por timeout de red (común en entornos restringidos como Hugging Face Free).
+    # En ese caso el modelo recibiría el perfil idéntico de un sitio de phishing
+    # nuevo (age=0, ssl=None, self_signed=1) aunque sea un sitio legítimo.
+    # NO ejecutar el modelo cuando los datos clave son insuficientes.
+    ssl_available = osint_data and osint_data.ssl is not None
+    whois_available = osint_data and osint_data.whois is not None
+    if not ssl_available and not whois_available:
+        logger.info(
+            f"ML OSINT omitido para {url}: SSL y WHOIS son None "
+            "(posible timeout de red). Se evita falso positivo."
+        )
+        return {"ml_score": 0, "flags": []}
+
     try:
         feature_names = [
-            "url_len", "domain_len", "path_len", "dots_count", "hyphens_count", 
+            "url_len", "domain_len", "path_len", "dots_count", "hyphens_count",
             "has_numbers", "entropy", "has_keywords", "suspicious_tld",
-            "whois_domain_age", "ssl_days_expiry", "ssl_is_self_signed", 
+            "whois_domain_age", "ssl_days_expiry", "ssl_is_self_signed",
             "is_obfuscated_js", "trackers_count"
         ]
         features = extract_ml_features(url, osint_data)
         features_df = pd.DataFrame([features], columns=feature_names)
-        
+
         prob = model.predict_proba(features_df)[0][1]
         score = int(prob * 100)
-        
+
         flags = []
         if score >= 85:
             flags.append(f"ML_OSINT_CRITICAL (Prob: {prob:.2f})")
         elif score >= 60:
             flags.append(f"ML_OSINT_HIGH (Prob: {prob:.2f})")
-            
+
         return {"ml_score": score, "flags": flags}
     except Exception as e:
         logger.error(f"Error inferencia ML OSINT: {e}")

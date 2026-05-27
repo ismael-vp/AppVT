@@ -3,11 +3,12 @@
 Generador de dataset OSINT SINTÉTICO (versión robusta para dominios legítimos populares).
 """
 
+import argparse
 import csv
 import os
-import sys
 import random
-import argparse
+import sys
+
 import numpy as np
 from tqdm import tqdm
 
@@ -37,7 +38,7 @@ def load_phishing_urls(filepath: str, max_samples: int) -> list:
     if not os.path.exists(filepath):
         print(f"⚠️ Archivo no encontrado: {filepath}")
         return []
-    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+    with open(filepath, encoding='utf-8', errors='ignore') as f:
         for i, line in enumerate(f):
             url = line.strip()
             if not url.startswith("http"):
@@ -68,42 +69,51 @@ def generate_legit_urls(count: int) -> list:
 def generate_osint_features_legit() -> list:
     """
     Características OSINT para un dominio legítimo.
-    Ahora incluye variantes realistas para sitios con poca información pública.
     """
-    # WHOIS age: 90% tiene entre 1 y 10 años, 10% devuelve 0 (fallo o privacidad)
-    if random.random() < 0.1:
+    # WHOIS age: 15% tiene privacidad (devuelve 0)
+    if random.random() < 0.15:
         whois_age = 0
     else:
         whois_age = random.randint(365, 3650) + random.randint(-30, 30)
         whois_age = max(1, whois_age)
 
-    # SSL: emitido por CA, caduca en 30-365 días
-    ssl_days_expiry = max(1, random.randint(30, 365) + random.randint(-5, 5))
-    ssl_is_self_signed = 0
-    is_obfuscated_js = 1 if random.random() < 0.02 else 0
+    # SSL: emitido por CA, pero 5% puede ser autofirmado (intranets, error config)
+    ssl_is_self_signed = 1 if random.random() < 0.05 else 0
+    ssl_days_expiry = max(0, random.randint(30, 365) + random.randint(-5, 5)) if not ssl_is_self_signed else random.randint(0, 100)
 
-    # Trackers: 20% de los casos con pocos (0-5), resto entre 5-40
+    is_obfuscated_js = 1 if random.random() < 0.1 else 0
+
+    # Trackers: gran dispersión
     if random.random() < 0.2:
         trackers_count = int(np.random.uniform(0, 5))
     else:
-        trackers_count = int(np.random.triangular(5, 10, 40))
+        trackers_count = int(np.random.triangular(2, 10, 40))
 
     return [whois_age, ssl_days_expiry, ssl_is_self_signed, is_obfuscated_js, trackers_count]
 
 def generate_osint_features_phishing() -> list:
-    """Características OSINT para un dominio de phishing."""
-    whois_age = max(0, random.randint(0, 30) + random.randint(-5, 5))
-    if random.random() < 0.1:
-        whois_age = random.randint(31, 90)
-
-    ssl_is_self_signed = 1 if random.random() < 0.7 else 0
-    if ssl_is_self_signed:
-        ssl_days_expiry = max(0, random.randint(0, 30) + random.randint(-5, 5))
+    """Características OSINT para un dominio de phishing (mucho más realista)."""
+    # 90% tienen creación reciente, 10% son dominios secuestrados o expirados
+    if random.random() < 0.9:
+        whois_age = max(0, random.randint(0, 60))
     else:
-        ssl_days_expiry = max(10, random.randint(30, 365) + random.randint(-10, 10))
+        whois_age = random.randint(365, 3000)
 
-    is_obfuscated_js = 1 if random.random() < 0.65 else 0
-    trackers_count = max(0, np.random.poisson(1))
+    # El phishing moderno usa Let's Encrypt (SSL válido). Sólo el 30% usa autofirmado o sin SSL
+    ssl_is_self_signed = 1 if random.random() < 0.3 else 0
+    if ssl_is_self_signed:
+        ssl_days_expiry = max(0, random.randint(0, 30))
+    else:
+        ssl_days_expiry = max(10, random.randint(30, 90)) # Let's Encrypt dura 90 días
+
+    # El phishing ofusca a menudo, pero no siempre
+    is_obfuscated_js = 1 if random.random() < 0.5 else 0
+
+    # Trackers: suelen tener muy pocos (0 o 1), pero a veces inyectan google analytics falso
+    if random.random() < 0.2:
+        trackers_count = random.randint(1, 5)
+    else:
+        trackers_count = max(0, np.random.poisson(1))
 
     return [whois_age, ssl_days_expiry, ssl_is_self_signed, is_obfuscated_js, trackers_count]
 

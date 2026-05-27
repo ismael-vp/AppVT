@@ -224,7 +224,7 @@ class AIService:
             )
 
         resource_type = _sanitize_untrusted_text(str(resource_type))[:50]
-        
+
         # Filtramos contenido enorme como html_content para no saturar el prompt
         safe_osint = {}
         if isinstance(osint_data, dict):

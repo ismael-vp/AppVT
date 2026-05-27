@@ -1,24 +1,25 @@
-#!/usr/bin/env python3
-"""
-Entrenamiento del modelo OSINT (RandomForest) con dataset sintético robusto.
-"""
-
 import os
+
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import json
-import time
-import joblib
-import pandas as pd
-import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, RandomizedSearchCV
-from sklearn.metrics import (
-    accuracy_score, classification_report, confusion_matrix,
-    roc_auc_score, f1_score, precision_score, recall_score
-)
 import logging
+
+import joblib
+import numpy as np
+import pandas as pd
+from lightgbm import LGBMClassifier
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.model_selection import RandomizedSearchCV, train_test_split
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -32,10 +33,10 @@ METRICS_PATH = os.path.join(models_dir, "phishing_osint_rf_metrics.json")
 DATASET_PATH = os.path.join(base_dir, "dataset_osint.csv")
 
 SEARCH_PARAMS = {
-    'n_estimators': [150, 250, 350],
-    'max_depth': [12, 15, 20],
-    'min_samples_split': [8, 12],
-    'min_samples_leaf': [3, 5]
+    'n_estimators': [50, 100, 150],
+    'max_depth': [8, 12, 15],
+    'learning_rate': [0.05, 0.1],
+    'num_leaves': [31, 63, 127]
 }
 
 def main():
@@ -52,20 +53,20 @@ def main():
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    base_rf = RandomForestClassifier(class_weight='balanced', random_state=42, n_jobs=2)
+    base_lgbm = LGBMClassifier(class_weight='balanced', random_state=42, n_jobs=2)
     search = RandomizedSearchCV(
-        base_rf, SEARCH_PARAMS, n_iter=8, cv=3, scoring='f1',
+        base_lgbm, SEARCH_PARAMS, n_iter=8, cv=3, scoring='f1',
         random_state=42, n_jobs=2, verbose=1
     )
     search.fit(X_train, y_train)
     logger.info(f"Mejores parámetros: {search.best_params_}")
 
-    best_rf = RandomForestClassifier(**search.best_params_, class_weight='balanced',
+    best_lgbm = LGBMClassifier(**search.best_params_, class_weight='balanced',
                                      random_state=42, n_jobs=2)
-    best_rf.fit(X_train, y_train)
+    best_lgbm.fit(X_train, y_train)
 
-    y_pred = best_rf.predict(X_test)
-    y_proba = best_rf.predict_proba(X_test)[:, 1]
+    y_pred = best_lgbm.predict(X_test)
+    y_proba = best_lgbm.predict_proba(X_test)[:, 1]
 
     acc = accuracy_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred)
@@ -79,7 +80,7 @@ def main():
     cm = confusion_matrix(y_test, y_pred)
     print("Matriz de confusión:\n", cm)
 
-    importances = best_rf.feature_importances_
+    importances = best_lgbm.feature_importances_
     indices = np.argsort(importances)[::-1]
     logger.info("Importancia de características:")
     for i in indices:
@@ -94,7 +95,7 @@ def main():
     with open(METRICS_PATH, 'w') as f:
         json.dump(metrics, f, indent=2)
 
-    joblib.dump(best_rf, MODEL_PATH, compress=3)
+    joblib.dump(best_lgbm, MODEL_PATH, compress=3)
     logger.info(f"Modelo guardado en {MODEL_PATH}")
 
 if __name__ == "__main__":

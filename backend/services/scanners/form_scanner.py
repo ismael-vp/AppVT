@@ -2,10 +2,10 @@ import asyncio
 import logging
 import os
 import re
+import warnings
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
-import warnings
 
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 

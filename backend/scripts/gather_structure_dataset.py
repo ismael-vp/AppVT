@@ -5,15 +5,14 @@ Incluye un 40% de URLs de confianza (plantillas de sitios populares)
 para evitar falsos positivos en dominios legítimos.
 """
 
+import argparse
 import csv
 import logging
 import os
-import sys
 import random
-import argparse
+import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from itertools import islice
-from typing import List, Tuple
 
 import tqdm
 
@@ -161,13 +160,13 @@ PLACEHOLDERS = {
 }
 
 # ----------------------------------------------------------------------
-def load_phishing_urls(filepath: str, max_samples: int, seed: int = None) -> List[str]:
+def load_phishing_urls(filepath: str, max_samples: int, seed: int = None) -> list[str]:
     if not os.path.exists(filepath):
         logger.error(f"No se encontró {filepath}")
         return []
     random.seed(seed)
     reservoir = []
-    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+    with open(filepath, encoding='utf-8', errors='ignore') as f:
         for i, line in enumerate(f):
             url = line.strip()
             if not url.startswith("http"):
@@ -194,7 +193,7 @@ def _fill_template(template: str) -> str:
         return match.group(0)
     return pattern.sub(replacer, template)
 
-def generate_trusted_urls(count: int) -> List[str]:
+def generate_trusted_urls(count: int) -> list[str]:
     urls = []
     for _ in range(count):
         template = random.choice(TRUSTED_TEMPLATES)
@@ -202,7 +201,7 @@ def generate_trusted_urls(count: int) -> List[str]:
         urls.append(url)
     return urls
 
-def generate_random_legit_urls(count: int) -> List[str]:
+def generate_random_legit_urls(count: int) -> list[str]:
     urls = []
     alnum = "abcdefghijklmnopqrstuvwxyz0123456789"
     for _ in range(count):
@@ -224,7 +223,7 @@ def generate_random_legit_urls(count: int) -> List[str]:
         urls.append(f"https://{sub}{domain}{port}{path}{query}{fragment}")
     return urls
 
-def generate_legit_urls(total: int, trusted_ratio: float = 0.4, seed: int = None) -> List[str]:
+def generate_legit_urls(total: int, trusted_ratio: float = 0.4, seed: int = None) -> list[str]:
     random.seed(seed)
     trusted_count = int(total * trusted_ratio)
     random_count = total - trusted_count
@@ -234,13 +233,13 @@ def generate_legit_urls(total: int, trusted_ratio: float = 0.4, seed: int = None
     random.shuffle(all_urls)
     return all_urls
 
-def extract_features_batch(urls_labels: List[Tuple[str, int]]) -> List[Tuple[list, int]]:
+def extract_features_batch(urls_labels: list[tuple[str, int]]) -> list[tuple[list, int]]:
     results = []
     for url, label in urls_labels:
         try:
             features = extract_advanced_features(url)
             results.append((features, label))
-        except Exception as e:
+        except Exception:
             results.append(None)
     return results
 
@@ -252,7 +251,7 @@ def chunked(iterable, size):
             break
         yield chunk
 
-def write_csv_header(output_path: str, headers: List[str]):
+def write_csv_header(output_path: str, headers: list[str]):
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(headers)

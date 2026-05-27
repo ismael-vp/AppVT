@@ -30,6 +30,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-spa \
     tesseract-ocr-eng \
+    whois \
+    libzbar0 \
+    ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 

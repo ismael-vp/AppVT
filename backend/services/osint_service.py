@@ -9,6 +9,7 @@ import httpx
 from config import settings
 from models.osint_models import OSINTResponse
 from services.feed_service import FeedService
+from services.ml_analyzer import analyze_osint_with_ml
 from services.scanners.dns_scanner import DNSScanner
 from services.scanners.form_scanner import FormScanner
 from services.scanners.geo_scanner import GeoScanner
@@ -17,7 +18,6 @@ from services.scanners.safe_browsing_scanner import SafeBrowsingScanner
 from services.scanners.ssl_scanner import SSLScanner
 from services.scanners.tech_scanner import TechScanner
 from services.scanners.whois_scanner import WhoisScanner
-from services.ml_analyzer import analyze_osint_with_ml
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +57,13 @@ class OSINTService:
             ip_address = None
 
         # Timeouts granulares (en segundos)
+        # Nota: En Hugging Face Free el stack de red es más lento que en local.
+        # SSL y WHOIS (vía RDAP) necesitan más tiempo para completarse.
         T_GEO = 4.0
-        T_WHOIS = 8.0
-        T_SSL = 5.0
+        T_WHOIS = 15.0  # RDAP (8s) + fallback python-whois (8s) + margen
+        T_SSL = 12.0    # Conexión SSL desde datacenter de HF puede tardar 8-10s
         T_DNS = 5.0
-        T_TECH = 10.0
+        T_TECH = 20.0   # YouTube y sitios grandes pueden ser lentos para descargar
 
         async def _safe_call(coro, timeout: float):
             try:
@@ -159,7 +161,7 @@ class OSINTService:
                 else:
                     logger.warning(f"Microlink falló con status {response.status_code} para {url}")
         except Exception as e:
-            logger.warning(f"Error en Microlink (Mobile render) para {url}: {type(e).__name__} - {str(e)}")
+            logger.warning(f"Error en Microlink (Mobile render) para {url}: {type(e).__name__} - {e!s}")
 
         if not osint_data.screenshot_mobile:
             osint_data.screenshot_mobile = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&embed=screenshot.url&device=iPhone+13"
@@ -226,13 +228,17 @@ class OSINTService:
             )
         # === Machine Learning Integration ===
         ml_results = analyze_osint_with_ml(url, osint_data)
-        if ml_results["ml_score"] > 0 and osint_data.heuristic_result:
+        if ml_results["ml_score"] >= 50 and osint_data.heuristic_result:
             # Combine the ML score with the existing heuristic score
             ml_score = ml_results["ml_score"]
             current_risk = osint_data.heuristic_result.risk_score
             new_risk = max(current_risk, ml_score) + (ml_score * 0.2 if current_risk > 30 else 0)
             osint_data.heuristic_result.risk_score = min(100, int(new_risk))
-            
+
+            # Actualizar el nivel textual basado en el nuevo puntaje
+            from services.utils import calculate_risk_level
+            osint_data.heuristic_result.level = calculate_risk_level(osint_data.heuristic_result.risk_score)
+
             if ml_results["flags"]:
                 osint_data.heuristic_result.flags.extend(ml_results["flags"])
 

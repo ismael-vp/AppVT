@@ -31,8 +31,8 @@ async def lifespan(app: FastAPI):
     # ── Inicializar FeedService (feeds locales de phishing) ──────────────────
     feed_svc = None
     try:
-        from services.feed_service import FeedService
         from config import settings as _settings
+        from services.feed_service import FeedService
         feed_svc = FeedService()
         await feed_svc.initialize(phishtank_api_key=_settings.PHISHTANK_API_KEY)
         logger.info(f"✅ FeedService inicializado ({feed_svc.total_entries:,} entradas en BD)")

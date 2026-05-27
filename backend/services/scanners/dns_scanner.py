@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+
 import dns.asyncresolver
 from dns.exception import DNSException
 

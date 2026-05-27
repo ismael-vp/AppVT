@@ -1,15 +1,14 @@
 import logging
 import math
 import re
-import os
+from collections import Counter
 from typing import Any
 from urllib.parse import urlparse
-from collections import Counter
 
 import tldextract
 
-from services.utils import calculate_risk_level, levenshtein_similarity, TARGET_BRANDS_DETAILED
 from services.ml_analyzer import analyze_structure_with_ml
+from services.utils import TARGET_BRANDS_DETAILED, calculate_risk_level, levenshtein_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -274,10 +273,14 @@ class URLStructureAnalyzer:
         # === Machine Learning Estructural ===
         # Delegamos TODO el peso del riesgo estructural a la IA
         ml_results = analyze_structure_with_ml(url)
-        risk_score = ml_results.get("ml_score", 0)
-        
-        if ml_results.get("flags"):
-            flags.extend(ml_results["flags"])
+        raw_ml_score = ml_results.get("ml_score", 0)
+
+        if raw_ml_score >= 50:
+            risk_score = raw_ml_score
+            if ml_results.get("flags"):
+                flags.extend(ml_results["flags"])
+        else:
+            risk_score = 0
 
         risk_score = max(0, min(int(risk_score), 100))
         level = calculate_risk_level(risk_score)
