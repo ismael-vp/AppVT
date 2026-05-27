@@ -191,9 +191,10 @@ class HeuristicScanner:
                 extracted = tldextract.extract(extracted_hostname)
                 scanned_domain = extracted.domain.lower()  # ej. "google"
 
-                for brand in osint_data.tech_data.ocr_extracted_brands:
-                    official_domain = TARGET_BRANDS.get(brand, brand)
-                    brand_lower = brand.lower()
+                for raw_brand in osint_data.tech_data.ocr_extracted_brands:
+                    brand_clean = raw_brand.strip()
+                    brand_lower = brand_clean.lower()
+                    official_domain = TARGET_BRANDS.get(brand_lower, brand_clean)
 
                     # 1️⃣  El dominio escaneado coincide exactamente con la marca
                     #    (ej. google.com escaneando "google")
@@ -215,11 +216,11 @@ class HeuristicScanner:
                     # Una marca en el logo/footer sin form de contraseña NO es suplantación.
                     if has_login_indicators:
                         base_score += 85
-                        flags.append(f"VISUAL_BRAND_IMPERSONATION (Marca detectada: {brand.capitalize()})")
+                        flags.append(f"VISUAL_BRAND_IMPERSONATION (Marca detectada: {brand_clean.capitalize()})")
                     else:
                         # Indicador suave: marca presente pero sin login form
                         logger.debug(
-                            f"Marca '{brand}' detectada en {extracted_hostname} sin indicadores de login — no se penaliza"
+                            f"Marca '{brand_clean}' detectada en {extracted_hostname} sin indicadores de login — no se penaliza"
                         )
 
         if osint_data and osint_data.ssl:
