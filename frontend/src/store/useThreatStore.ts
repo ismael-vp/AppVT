@@ -4,6 +4,28 @@ import { ScanMode, ScanResult } from '@/types';
 import { ScanResultSchema } from '@/lib/validations';
 import { supabase } from '@/lib/supabase';
 
+// ---------------------------------------------------------------------------
+// Helper: fire-and-forget Supabase sync — nunca bloquea el store
+// ---------------------------------------------------------------------------
+async function syncToSupabase(result: ScanResult, finalUrl: string): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return;
+    await supabase.from('scan_reports').delete().match({
+      user_id: session.user.id,
+      input_target: finalUrl
+    });
+    await supabase.from('scan_reports').insert({
+      user_id: session.user.id,
+      input_target: finalUrl,
+      scan_data: result,
+      is_public: false
+    });
+  } catch (e) {
+    console.error('[Supabase sync] Error guardando historial:', e);
+  }
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -50,7 +72,7 @@ export const useThreatStore = create<ThreatState>()(
       // Setters
       setMode: (mode) => set({ mode }),
       setIsScanning: (isScanning) => set({ isScanning }),
-      setScanResult: async (result, resourceName) => {
+      setScanResult: (result, resourceName) => {
         if (!result) {
           set({ scanResult: null, error: null });
           return;
@@ -84,33 +106,15 @@ export const useThreatStore = create<ThreatState>()(
           ...state.history.filter(h => h.resourceName !== finalUrl)
         ].slice(0, 15);
 
-        set({ 
-          scanResult: enrichedResult, 
+        // Actualización síncrona del store — instantánea, nunca bloquea la UI
+        set({
+          scanResult: enrichedResult,
           error: null,
           history: newHistory
         });
 
-        // Sincronización transparente con Supabase si está logueado
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          try {
-            // Borrar registro anterior si existe para no duplicar historiales
-            await supabase.from('scan_reports').delete().match({
-              user_id: session.user.id,
-              input_target: finalUrl
-            });
-
-            // Guardamos el escaneo en la base de datos
-            await supabase.from('scan_reports').insert({
-              user_id: session.user.id,
-              input_target: finalUrl,
-              scan_data: enrichedResult,
-              is_public: false
-            });
-          } catch (e) {
-            console.error("Error guardando historial en la nube", e);
-          }
-        }
+        // Sincronización con Supabase: fire-and-forget, no bloquea el store
+        syncToSupabase(enrichedResult, finalUrl);
       },
       setError: (error) => set({ error, scanResult: null, isScanning: false }),
       resetState: () => set({ isScanning: false, scanResult: null, error: null }),
@@ -175,12 +179,17 @@ export const useThreatStore = create<ThreatState>()(
           if (error) throw error;
 
           if (data && data.length > 0) {
-            const cloudHistory = data.map((row) => row.scan_data as ScanResult);
-            // Combinar y deduplicar (priorizando la nube)
+            // Fix 12: validar datos de la nube con Zod antes de meterlos al store
+            const cloudHistory: ScanResult[] = [];
+            for (const row of data) {
+              const parsed = ScanResultSchema.safeParse(row.scan_data);
+              if (parsed.success) cloudHistory.push(parsed.data as ScanResult);
+            }
+
             const localHistory = get().history;
             const merged = [...cloudHistory, ...localHistory];
-            const unique = Array.from(new Map(merged.map(item => [item.resourceName, item])).values()).slice(0, 15);
-            
+            const deduped = new Map(merged.map(item => [item.resourceName ?? '', item]));
+            const unique = Array.from(deduped.values()).slice(0, 15);
             set({ history: unique });
           }
         } catch (e) {

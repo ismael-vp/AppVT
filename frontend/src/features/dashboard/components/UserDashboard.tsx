@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ScanResult } from '@/types';
 import { RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
@@ -50,6 +50,9 @@ function truncateUrl(url: string, max = 40): string {
   return url.slice(0, max) + '…';
 }
 
+// M-2: Constantes de color fuera del componente — evitar recrear el array en cada render
+const PIE_COLORS = ['#ef4444', '#10b981'] as const; // Red, Emerald
+
 export default function UserDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +61,7 @@ export default function UserDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'logs'>('overview');
 
-  const fetchData = async (isRefresh = false) => {
+  const fetchData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -85,12 +88,12 @@ export default function UserDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Sin dependencias: getSession() y setters de estado son estables
 
-  useEffect(() => { 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchData(); 
-  }, []);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // ── Cálculo de métricas ────────────────────────────────────────────────────
   const metrics = useMemo(() => {
@@ -115,10 +118,12 @@ export default function UserDashboard() {
 
       // Timeline
       const dateObj = new Date(row.created_at);
-      const dateStr = `${dateObj.getDate()}/${dateObj.getMonth() + 1}`;
-      if (!timelineMap[dateStr]) timelineMap[dateStr] = { date: dateStr, scans: 0, malicious: 0 };
-      timelineMap[dateStr].scans++;
-      if (isMalicious) timelineMap[dateStr].malicious++;
+      // M-5: Usar YYYY-MM-DD como clave única (evita colisiones entre años)
+      const isoKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+      const displayDate = `${dateObj.getDate()}/${dateObj.getMonth() + 1}`;
+      if (!timelineMap[isoKey]) timelineMap[isoKey] = { date: displayDate, scans: 0, malicious: 0 };
+      timelineMap[isoKey].scans++;
+      if (isMalicious) timelineMap[isoKey].malicious++;
 
       // Brands
       const brand = scan.osint_data?.target_brand;
@@ -248,7 +253,6 @@ export default function UserDashboard() {
     );
   }
 
-  const PIE_COLORS = ['#ef4444', '#10b981']; // Red, Emerald
 
   return (
     <div className="w-full max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">

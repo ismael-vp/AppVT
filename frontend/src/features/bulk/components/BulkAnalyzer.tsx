@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useBulkStore, UrlResult } from '@/store/useBulkStore';
 import { API_URL } from '@/lib/api';
@@ -50,12 +50,16 @@ export default function BulkAnalyzer() {
   // Ya no limpiamos el timer al desmontar para que siga corriendo en segundo plano
   // useEffect(() => () => { if (countdownRef.current) clearInterval(countdownRef.current); }, []);
 
-  const parseUrls = (text: string): string[] =>
-    text.split('\n')
-      .map(l => l.trim())
-      .filter(l => l.length > 0 && (l.startsWith('http') || l.startsWith('www.')))
-      .map(l => l.startsWith('www.') ? `https://${l}` : l)
-      .slice(0, MAX_URLS);
+  // M-7: parseUrls se llamaba 3 veces por render. Un único useMemo que sólo recalcula cuando rawText cambia.
+  const parsedUrls = useMemo(
+    () =>
+      rawText.split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0 && (l.startsWith('http') || l.startsWith('www.')))
+        .map(l => l.startsWith('www.') ? `https://${l}` : l)
+        .slice(0, MAX_URLS),
+    [rawText]
+  );
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -103,8 +107,8 @@ export default function BulkAnalyzer() {
     }, 1000);
   };
 
-  const handleStart = useCallback(async () => {
-    const urls = parseUrls(rawText);
+  const handleStart = async () => {
+    const urls = parsedUrls;
     if (urls.length === 0) return;
 
     abortRef.current = false;
@@ -141,7 +145,7 @@ export default function BulkAnalyzer() {
     if (countdownRef.current) clearInterval(countdownRef.current);
     setCountdown(0);
     setRunning(false);
-  }, [rawText]);
+  };
 
   const handleStop = () => {
     abortRef.current = true;
@@ -167,7 +171,7 @@ export default function BulkAnalyzer() {
     a.click();
   };
 
-  const urlCount = parseUrls(rawText).length;
+  const urlCount = parsedUrls.length;
   const done = results.filter(r => r.status === 'done' || r.status === 'error').length;
   const threats = results.filter(r => r.label === 'malicious' || r.label === 'suspicious').length;
   const progress = results.length > 0 ? Math.round((done / results.length) * 100) : 0;

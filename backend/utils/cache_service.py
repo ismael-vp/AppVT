@@ -144,6 +144,9 @@ class CacheService:
                     last_exc = exc
                     delay = DB_LOCK_RETRY_DELAY * (2 ** attempt)
                     logger.warning(f"SQLite locked (intento {attempt + 1}), esperando {delay:.2f}s")
+                    # time.sleep() aquí bloquearía el event loop si se llama desde un contexto async.
+                    # Las operaciones SQLite ya están wrapped en asyncio.to_thread en sus call-sites,
+                    # así que este sleep ocurre en un hilo worker y NO bloquea el loop.
                     time.sleep(delay)
                 else:
                     raise
@@ -163,26 +166,36 @@ class CacheService:
             logger.warning(f"Error en limpieza de caché: {exc}")
 
     def _cleanup_expired(self) -> int:
-        """Elimina registros expirados."""
+        """Elimina registros expirados y ejecuta VACUUM en conexión separada."""
         def _do_cleanup():
+            deleted = 0
             with sqlite3.connect(self.db_path, timeout=10.0) as conn:
                 cutoff = (datetime.now() - timedelta(hours=DEFAULT_TTL_HOURS)).isoformat()
                 cursor = conn.execute("DELETE FROM scan_cache WHERE timestamp < ?", (cutoff,))
                 conn.commit()
-                try:
-                    conn.execute("VACUUM")
-                except sqlite3.OperationalError:
-                    pass
-                return cursor.rowcount
+                deleted = cursor.rowcount
+
+            # M-7: VACUUM no puede ejecutarse dentro de una transacción.
+            # Se ejecuta en una conexión separada con autocommit (isolation_level=None).
+            try:
+                with sqlite3.connect(self.db_path, isolation_level=None, timeout=5.0) as vconn:
+                    vconn.execute("VACUUM")
+            except sqlite3.OperationalError:
+                pass  # Si falla (DB ocupada), no es crítico
+
+            return deleted
         return self._with_retry(_do_cleanup)
 
     def _check_db_size(self) -> bool:
-        """Verifica el tamaño de la DB."""
+        """Verifica el tamaño de la DB. M-8: envuelve cleanup en try/except."""
         try:
             size_mb = os.path.getsize(self.db_path) / (1024 * 1024)
             if size_mb > MAX_DB_SIZE_MB:
                 logger.warning(f"Caché excede límite: {size_mb:.1f}MB > {MAX_DB_SIZE_MB}MB")
-                self._cleanup_expired()
+                try:
+                    self._cleanup_expired()
+                except Exception as exc:
+                    logger.warning(f"Error en cleanup de emergencia: {exc}")
                 return False
             return True
         except OSError:
@@ -199,7 +212,10 @@ class CacheService:
                 return current <= max_requests
             except Exception as e:
                 logger.error(f"Error en Redis rate limit: {e}")
-                return True  # Fall open en caso de error
+                # H-2: No caer en open (allow-all) si Redis falla.
+                # Usar el store en memoria local como fallback seguro.
+                logger.warning("Redis no disponible para rate limit — usando fallback en memoria")
+                # Fall-through al bloque de memoria local (no return)
 
         # Fallback a memoria local
         now = time.time()
@@ -381,7 +397,7 @@ class CacheService:
                 conn.commit()
         self._with_retry(_do_delete)
 
-    def clear_all(self, admin_key: str | None = None) -> bool:
+    def clear_all(self) -> bool:
         """Borra absolutamente toda la caché."""
         if self.use_redis and self.redis_client:
             try:
@@ -397,11 +413,13 @@ class CacheService:
                 cursor = conn.execute("DELETE FROM scan_cache")
                 deleted = cursor.rowcount
                 conn.commit()
-                try:
-                    conn.execute("VACUUM")
-                except sqlite3.OperationalError:
-                    pass
-                return deleted
+            # M-7 aplicó también aquí: VACUUM en conexión separada
+            try:
+                with sqlite3.connect(self.db_path, isolation_level=None, timeout=5.0) as vconn:
+                    vconn.execute("VACUUM")
+            except sqlite3.OperationalError:
+                pass
+            return deleted
         try:
             deleted = self._with_retry(_do_clear)
             logger.info(f"Caché completamente eliminada ({deleted} registros)")

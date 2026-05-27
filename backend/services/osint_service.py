@@ -6,16 +6,21 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
+from config import settings
 from models.osint_models import OSINTResponse
+from services.feed_service import FeedService
+from services.scanners.dns_scanner import DNSScanner
 from services.scanners.form_scanner import FormScanner
 from services.scanners.geo_scanner import GeoScanner
 from services.scanners.heuristic_scanner import HeuristicScanner
+from services.scanners.safe_browsing_scanner import SafeBrowsingScanner
 from services.scanners.ssl_scanner import SSLScanner
 from services.scanners.tech_scanner import TechScanner
 from services.scanners.whois_scanner import WhoisScanner
-from services.scanners.dns_scanner import DNSScanner
+from services.ml_analyzer import analyze_osint_with_ml
 
 logger = logging.getLogger(__name__)
+
 
 async def _null_coro():
     """Coroutine nula: usada como placeholder en asyncio.gather cuando se omite un scanner."""
@@ -44,32 +49,50 @@ class OSINTService:
 
         osint_data = OSINTResponse()
 
+        # Resolucion DNS y Geo
         try:
-            ip_address = await asyncio.to_thread(socket.gethostbyname, hostname)
+            ip_address = await asyncio.wait_for(asyncio.to_thread(socket.gethostbyname, hostname), timeout=3.0)
         except Exception as e:
             logger.warning(f"Fallo de resolución DNS para {hostname}: {e}")
             ip_address = None
 
-        try:
-            results = await asyncio.wait_for(
-                asyncio.gather(
-                    # Bug #1 fix: si ip_address es None, saltamos GeoScanner con coroutine nula
-                    GeoScanner.get_geolocation_and_reputation(ip_address) if ip_address else _null_coro(),
-                    WhoisScanner.get_whois(hostname),
-                    SSLScanner.get_ssl_info(hostname),
-                    DNSScanner.get_dns_info(hostname),
-                    TechScanner.get_tech_and_scripts(url, hostname),
-                    return_exceptions=True
-                ),
-                timeout=12.0
-            )
-            geo_data, whois_data, ssl_data, dns_data, tech_data = results
-        except asyncio.TimeoutError:
-            logger.error(f"Timeout global de motores OSINT para {hostname}.")
-            geo_data = whois_data = ssl_data = dns_data = tech_data = None
-        except Exception as e:
-            logger.error(f"Error en orquestación concurrente: {e}")
-            geo_data = whois_data = ssl_data = dns_data = tech_data = None
+        # Timeouts granulares (en segundos)
+        T_GEO = 4.0
+        T_WHOIS = 8.0
+        T_SSL = 5.0
+        T_DNS = 5.0
+        T_TECH = 10.0
+
+        async def _safe_call(coro, timeout: float):
+            try:
+                return await asyncio.wait_for(coro, timeout=timeout)
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout en scanner (límite {timeout}s)")
+                return None
+            except Exception as e:
+                logger.error(f"Error en scanner: {e}")
+                return None
+
+        # Fix: Orquestación resiliente sin matar todo el bloque si uno falla
+        results = await asyncio.gather(
+            _safe_call(GeoScanner.get_geolocation_and_reputation(ip_address), T_GEO) if ip_address else _null_coro(),
+            _safe_call(WhoisScanner.get_whois(hostname), T_WHOIS),
+            _safe_call(SSLScanner.get_ssl_info(hostname), T_SSL),
+            _safe_call(DNSScanner.get_dns_info(hostname), T_DNS),
+            _safe_call(TechScanner.get_tech_and_scripts(url, hostname), T_TECH),
+            return_exceptions=True
+        )
+
+        # Tratar Excepciones no capturadas por _safe_call (que no deberían ocurrir)
+        processed_results = []
+        for r in results:
+            if isinstance(r, Exception):
+                logger.error(f"Excepción dura en gather: {r}")
+                processed_results.append(None)
+            else:
+                processed_results.append(r)
+
+        geo_data, whois_data, ssl_data, dns_data, tech_data = processed_results
 
         if geo_data and not isinstance(geo_data, Exception):
             osint_data.geolocation = geo_data.geolocation
@@ -122,8 +145,17 @@ class OSINTService:
                     real_title = api_data.get("title", "").strip().lower()
                     if real_title and osint_data.tech_data and osint_data.tech_data.html_content:
                         bot_title = OSINTService._extract_title_fast(osint_data.tech_data.html_content)
-                        if bot_title and bot_title != real_title:
-                            osint_data.cloaking_detected = True
+                        if bot_title:
+                            # Evitar falsos positivos por pequeños cambios dinámicos en el título
+                            # Ej: "Amazon.com" vs "Amazon.com: Spend less"
+                            bot_title_clean = bot_title.replace("  ", " ").strip()
+                            real_title_clean = real_title.replace("  ", " ").strip()
+                            if (bot_title_clean not in real_title_clean) and (real_title_clean not in bot_title_clean):
+                                # Tokenizamos para ver si al menos comparten la primera palabra clave (ej. marca principal)
+                                bot_tokens = bot_title_clean.split()
+                                real_tokens = real_title_clean.split()
+                                if not (bot_tokens and real_tokens and bot_tokens[0] == real_tokens[0]):
+                                    osint_data.cloaking_detected = True
                 else:
                     logger.warning(f"Microlink falló con status {response.status_code} para {url}")
         except Exception as e:
@@ -156,7 +188,57 @@ class OSINTService:
         except Exception as e:
             logger.error(f"Error en Heuristic Facade: {e}")
 
+        # ── TIER 0: Feed Local (OpenPhish / PhishTank) ──────────────────────────
+        # Consulta la BD local — latencia ~0ms, coste $0
+        try:
+            feed_result = await FeedService().check_url(url)
+            if feed_result.detected:
+                osint_data.feed_detected = True
+                osint_data.feed_source = feed_result.source
+                logger.info(f"🎣 Feed local: {url} detectada en {feed_result.source}")
+        except Exception as exc:
+            logger.warning(f"FeedService check_url error: {exc}")
+
+        # ── TIER 1: Google Safe Browsing ────────────────────────────────────────
+        # Solo consultamos GSB si la URL no fue ya marcada como maliciosa en Tier 0,
+        # para conservar la cuota gratuita de 10k/día.
+        dns_blacklisted = (
+            osint_data.dns is not None
+            and (osint_data.dns.spamhaus_listed or osint_data.dns.surbl_listed)
+        )
+        already_flagged = osint_data.feed_detected or dns_blacklisted
+
+        if not already_flagged:
+            try:
+                gsb_result = await SafeBrowsingScanner.check_url(
+                    url, settings.GOOGLE_SAFE_BROWSING_API_KEY
+                )
+                if gsb_result.checked:
+                    osint_data.safe_browsing_checked = True
+                if gsb_result.is_threat:
+                    osint_data.safe_browsing_threat = True
+                    osint_data.safe_browsing_types = gsb_result.threat_types
+            except Exception as exc:
+                logger.warning(f"SafeBrowsingScanner error: {exc}")
+        else:
+            logger.debug(
+                f"GSB omitida para {url}: ya detectada en {'feeds' if osint_data.feed_detected else 'DNS blacklist'}"
+            )
+        # === Machine Learning Integration ===
+        ml_results = analyze_osint_with_ml(url, osint_data)
+        if ml_results["ml_score"] > 0 and osint_data.heuristic_result:
+            # Combine the ML score with the existing heuristic score
+            ml_score = ml_results["ml_score"]
+            current_risk = osint_data.heuristic_result.risk_score
+            new_risk = max(current_risk, ml_score) + (ml_score * 0.2 if current_risk > 30 else 0)
+            osint_data.heuristic_result.risk_score = min(100, int(new_risk))
+            
+            if ml_results["flags"]:
+                osint_data.heuristic_result.flags.extend(ml_results["flags"])
+
+        # Limpiar el HTML antes de enviarlo al frontend
         if osint_data.tech_data:
             osint_data.tech_data.html_content = ""
 
         return osint_data
+

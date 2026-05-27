@@ -46,7 +46,6 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
   const router = useRouter();
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
@@ -55,7 +54,10 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
     try {
       const { data, error } = await supabase
         .from('scan_reports')
-        .select('*')
+        // H-11: Seleccionar solo columnas necesarias (sin user_id ni campos extra)
+        // Nota: los JSON path operators (scan_data->stats) devuelven columnas planas,
+        // rompiendo report.scan_data. Seleccionamos scan_data completo de forma segura.
+        .select('id, input_target, created_at, scan_data')
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -72,7 +74,6 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
   // Fetch history when modal opens
   useEffect(() => {
     if (isOpen && session) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchHistory();
     }
   }, [isOpen, session, fetchHistory]);
@@ -182,6 +183,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
               onClick={onClose}
               className="text-zinc-600 hover:text-zinc-300 transition-colors rounded-md p-1.5 hover:bg-zinc-800/50"
               tabIndex={isOpen ? 0 : -1}
+              aria-label="Cerrar historial"
             >
               <X size={16} />
             </button>
@@ -209,10 +211,11 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
           ) : (
             <div className="space-y-2">
               {reports.map((report) => {
+                const scanData = report.scan_data;
                 const isMalicious =
-                  report.scan_data.stats && report.scan_data.stats.malicious > 0 ||
-                  report.scan_data.image_analysis?.is_phishing ||
-                  report.scan_data.osint_data?.heuristic_result?.risk_score && report.scan_data.osint_data.heuristic_result.risk_score >= 70;
+                  (scanData?.stats?.malicious ?? 0) > 0 ||
+                  (scanData?.image_analysis?.is_phishing ?? false) ||
+                  ((scanData?.osint_data?.heuristic_result?.risk_score ?? 0) >= 70);
 
                 const Icon = isMalicious ? ShieldAlert : ShieldCheck;
                 const iconColor = isMalicious ? 'text-red-500/80' : 'text-emerald-500/80';
@@ -223,8 +226,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
                     key={report.id}
                     onClick={() => {
                       const { setMode, setScanResult } = useThreatStore.getState();
-                      setMode(report.scan_data.type || 'url');
-                      setScanResult(report.scan_data, report.input_target);
+                      setMode(report.scan_data?.type || 'url');
+                      setScanResult(report.scan_data || {}, report.input_target);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                       onClose();
                       router.push('/');
@@ -245,6 +248,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
                     <button
                       onClick={(e) => handleDelete(report.id, e)}
                       className="opacity-0 group-hover:opacity-100 p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-all shrink-0"
+                      aria-label="Eliminar reporte"
                     >
                       <Trash2 size={13} />
                     </button>

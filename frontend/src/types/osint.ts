@@ -36,10 +36,21 @@ export interface PrivacyData {
   device_access: string[];
 }
 
+export interface DNSData {
+  a_records: string[];
+  txt_records: string[];
+  mx_records: string[];
+  has_mx: boolean;
+  spamhaus_listed: boolean;
+  surbl_listed: boolean;
+  blacklist_details: string[];
+}
+
 export interface OSINTData {
   geolocation: GeolocationData | null;
   whois: WhoisData | null;
   ssl: SSLData | null;
+  dns: DNSData | null;
   redirect_chain: string[];
   external_scripts: string[];
   technologies: string[];
@@ -52,4 +63,16 @@ export interface OSINTData {
   abuseConfidenceScore: number | null;
   totalReports: number | null;
   privacy_analysis: PrivacyData | null;
+  heuristic_result?: {
+    risk_score: number;
+    level: string;
+    flags: string[];
+  } | null;
+  cloaking_detected?: boolean;
+  // Detección híbrida
+  safe_browsing_threat: boolean;
+  safe_browsing_types: string[];
+  safe_browsing_checked: boolean;
+  feed_detected: boolean;
+  feed_source: string | null;
 }

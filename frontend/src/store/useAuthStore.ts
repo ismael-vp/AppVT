@@ -43,18 +43,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     });
 
-    supabase.auth.onAuthStateChange((event, session) => {
+    // M-6: Guardar la suscripción para poder desuscribirse y evitar memory leaks
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       set({ session, user: session?.user || null });
       if (session?.user) {
         useThreatStore.getState().syncFromCloud();
       }
 
       // Limpiar el access_token de la URL por seguridad y estética después del login OAuth
+      // H-3: Eliminado setTimeout artificial de 100ms — no hay race condition que lo justifique
       if (typeof window !== 'undefined' && window.location.hash.includes('access_token=')) {
-        setTimeout(() => {
-          window.history.replaceState(null, '', window.location.pathname + window.location.search);
-        }, 100);
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
       }
     });
+
+    // Exponer unsubscribe en el estado para limpieza si fuera necesaria
+    // (en Next.js el store persiste durante toda la sesión de la app)
+    return () => subscription.unsubscribe();
   }
 }));

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Iniciando PhishingScanner API v1.0...")
+    logger.info("🚀 Iniciando PhishingScanner API v2.0...")
     try:
         from utils.cache_service import CacheService
         CacheService()
@@ -27,16 +27,46 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error(f"❌ Error inicializando caché: {exc}")
         sys.exit(1)
-    yield
-    logger.info("🛑 Apagando PhishingScanner API...")
-    try:
-        from services.geo_scanner import GeoScanner
 
-        from services.virustotal_service import VirusTotalService
-        await VirusTotalService.close_client()
+    # ── Inicializar FeedService (feeds locales de phishing) ──────────────────
+    feed_svc = None
+    try:
+        from services.feed_service import FeedService
+        from config import settings as _settings
+        feed_svc = FeedService()
+        await feed_svc.initialize(phishtank_api_key=_settings.PHISHTANK_API_KEY)
+        logger.info(f"✅ FeedService inicializado ({feed_svc.total_entries:,} entradas en BD)")
+    except Exception as exc:
+        logger.warning(f"⚠️  FeedService no disponible (no crítico): {exc}")
+    finally:
+        # Iniciar refresco background aunque initialize() falle parcialmente
+        if feed_svc is not None:
+            feed_svc.start_background_refresh()
+
+    yield
+
+    logger.info("🛑 Apagando PhishingScanner API...")
+    # Cerrar cliente HTTP compartido de GeoScanner
+    try:
+        from services.scanners.geo_scanner import GeoScanner  # ruta correcta (C-3)
         await GeoScanner.close_client()
     except Exception as exc:
-        logger.warning(f"Error cerrando clientes: {exc}")
+        logger.warning(f"Error cerrando cliente HTTP GeoScanner: {exc}")
+
+    # Detener FeedService usando la referencia guardada al arranque (C-5)
+    if feed_svc is not None:
+        try:
+            await feed_svc.stop()
+            logger.info("✅ FeedService detenido correctamente")
+        except Exception as exc:
+            logger.warning(f"Error deteniendo FeedService: {exc}")
+
+    # Cerrar cliente HTTP compartido de SafeBrowsingScanner (M-10)
+    try:
+        from services.scanners.safe_browsing_scanner import SafeBrowsingScanner
+        await SafeBrowsingScanner.close_client()
+    except Exception as exc:
+        logger.warning(f"Error cerrando cliente HTTP SafeBrowsingScanner: {exc}")
 
 app = FastAPI(
     title="PhishingScanner API",

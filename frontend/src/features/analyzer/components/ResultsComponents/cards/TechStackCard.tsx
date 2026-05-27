@@ -2,14 +2,13 @@ import React from 'react';
 import { Shield, ExternalLink } from 'lucide-react';
 
 interface TechStackCardProps {
-  technologies?: string[];
   externalScripts?: string[];
   onExplainScript?: (url: string) => void;
 }
 
-const TechStackCard: React.FC<TechStackCardProps> = ({ 
+const TechStackCard: React.FC<TechStackCardProps> = ({
   externalScripts = [],
-  onExplainScript 
+  onExplainScript
 }) => {
   return (
     <div className="space-y-8">

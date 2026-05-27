@@ -60,10 +60,18 @@ export interface PrivacyData {
   device_access: string[];
 }
 
+export interface DNSData {
+  has_mx?: boolean;
+  spamhaus_listed?: boolean;
+  surbl_listed?: boolean;
+  blacklist_details?: string[];
+}
+
 export interface OSINTData {
   geolocation?: GeolocationData | null;
   whois?: WhoisData | null;
   ssl?: SSLData | null;
+  dns?: DNSData | null;
   redirect_chain?: string[];
   external_scripts?: string[];
   technologies?: string[];
@@ -82,6 +90,12 @@ export interface OSINTData {
   cloaking_detected?: boolean;
   url_structure?: URLStructureResult | null;
   heuristic_result?: HeuristicResult | null;
+  // Detección híbrida (Google Safe Browsing + feeds de phishing)
+  safe_browsing_threat?: boolean;
+  safe_browsing_types?: string[];
+  safe_browsing_checked?: boolean;
+  feed_detected?: boolean;
+  feed_source?: string | null;
 }
 
 export interface URLStructureResult {

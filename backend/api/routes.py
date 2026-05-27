@@ -21,8 +21,9 @@ from pydantic import BaseModel, Field, field_validator
 from services.ai_service import AIService
 from services.image_phishing_service import ImagePhishingService
 from services.osint_service import OSINTService
-from services.utils import is_safe_url
+from services.utils import is_safe_url_async
 from utils.cache_service import CacheService
+from config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -43,14 +44,20 @@ IMAGE_ALLOWED_TYPES = {
 }
 
 
+# IPs de proxies de confianza (Nginx, load balancer, etc.)
+# Configurable vía env var: TRUSTED_PROXY_IPS=10.0.0.1,10.0.0.2
+_TRUSTED_PROXIES: set[str] = {
+    ip.strip() for ip in os.getenv("TRUSTED_PROXY_IPS", "").split(",") if ip.strip()
+}
+
 def get_client_ip(request: Request) -> str:
-    """Extrae la IP real del cliente respetando headers de proxy."""
-    x_forwarded_for = request.headers.get("X-Forwarded-For")
-    if x_forwarded_for:
-        return x_forwarded_for.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return "unknown"
+    """Extrae la IP real del cliente. Solo confía en X-Forwarded-For si viene de un proxy conocido."""
+    client_host = request.client.host if request.client else "unknown"
+    if client_host in _TRUSTED_PROXIES:
+        x_forwarded_for = request.headers.get("X-Forwarded-For")
+        if x_forwarded_for:
+            return x_forwarded_for.split(",")[0].strip()
+    return client_host
 
 def check_rate_limit(client_ip: str) -> bool:
     """Retorna True si la solicitud está dentro del límite permitido (vía Redis o Local)."""
@@ -66,8 +73,8 @@ async def rate_limit_dependency(request: Request):
         )
 
 def _get_admin_key() -> str:
-    """Lee la clave admin del entorno."""
-    return os.getenv("ADMIN_SECRET_KEY", "").strip()
+    """Lee la clave admin desde settings (validada en startup)."""
+    return settings.ADMIN_SECRET_KEY
 
 def _serialize_osint(osint: Any) -> dict:
     """
@@ -105,6 +112,18 @@ def _serialize_osint(osint: Any) -> dict:
     if hasattr(osint, "url_structure"):
         us = osint.url_structure
         d["url_structure"]      = us.model_dump() if us and hasattr(us, "model_dump") else us
+
+    # --- Campos de detección híbrida ---
+    if hasattr(osint, "safe_browsing_threat"):
+        d["safe_browsing_threat"]   = osint.safe_browsing_threat
+    if hasattr(osint, "safe_browsing_types"):
+        d["safe_browsing_types"]    = osint.safe_browsing_types
+    if hasattr(osint, "safe_browsing_checked"):
+        d["safe_browsing_checked"]  = osint.safe_browsing_checked
+    if hasattr(osint, "feed_detected"):
+        d["feed_detected"]          = osint.feed_detected
+    if hasattr(osint, "feed_source"):
+        d["feed_source"]            = osint.feed_source
 
     # --- Fix camelCase: el frontend usa abuseConfidenceScore / totalReports ---
     if "abuse_confidence_score" in d:
@@ -177,23 +196,16 @@ def validate_image_magic_bytes(image_bytes: bytes) -> str:
         detail="Formato de imagen no soportado, corrupto o posible archivo malicioso."
     )
 
-def validate_url_safety(url: str) -> str:
-    """Valida formato y seguridad de una URL."""
+def validate_url_format(url: str) -> str:
+    """Valida solo el formato de una URL (sin DNS — no bloquea el event loop)."""
     url = url.strip()
     if not url:
         raise ValueError("La URL no puede estar vacía")
-
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise ValueError("La URL debe usar protocolo http:// o https://")
     if not parsed.netloc:
         raise ValueError("La URL no contiene un dominio válido")
-
-    if not is_safe_url(url):
-        raise ValueError(
-            "La URL no es segura para analizar. Se detectó un posible intento de SSRF."
-        )
-
     return url
 
 class URLRequest(BaseModel):
@@ -202,7 +214,8 @@ class URLRequest(BaseModel):
     @field_validator("url")
     @classmethod
     def check_url(cls, v: str) -> str:
-        return validate_url_safety(v)
+        """Valida formato solamente. La comprobación SSRF (DNS) ocurre en el handler async."""
+        return validate_url_format(v)
 
 class ChatMessage(BaseModel):
     role: str = Field(..., pattern="^(system|user|assistant)$")
@@ -231,7 +244,7 @@ class ScriptExplainRequest(BaseModel):
     @field_validator("script_url")
     @classmethod
     def check_script_url(cls, v: str) -> str:
-        return validate_url_safety(v)
+        return validate_url_format(v)  # sólo valida formato; el check SSRF (DNS) es async y ocurre en el handler
 
 @router.post(
     "/analyze/url",
@@ -240,6 +253,13 @@ class ScriptExplainRequest(BaseModel):
 async def analyze_url(request: URLRequest = Body(...)):  # noqa: B008
     """Analiza una URL en busca de phishing, malware y anomalías."""
     try:
+        # Comprobación SSRF async (DNS no bloqueante) — aquí, no en el validador Pydantic
+        if not await is_safe_url_async(request.url):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La URL no es segura para analizar. Se detectó un posible intento de SSRF."
+            )
+
         # 1. Obtener la cadena de redirecciones primero
         from services.utils import resolve_redirect_chain
         try:
@@ -277,7 +297,29 @@ async def analyze_url(request: URLRequest = Body(...)):  # noqa: B008
         malicious_score = 0
         suspicious_score = 0
 
-        # AbuseIPDB
+        # ── TIER 0a: DNS Blacklists (Spamhaus DBL + SURBL) ─────────────────────
+        dns_data_r = getattr(osint_data, "dns", None)
+        if dns_data_r:
+            if getattr(dns_data_r, "spamhaus_listed", False) or getattr(dns_data_r, "surbl_listed", False):
+                malicious_score += 2
+                details = getattr(dns_data_r, "blacklist_details", [])
+                detail_str = " | ".join(details) if details else "Spamhaus DBL / SURBL"
+                heuristic_reasons.append(f"🚫 Dominio en lista negra DNS: {detail_str}")
+
+        # ── TIER 0b: Feeds locales de phishing (OpenPhish / PhishTank) ─────────
+        if getattr(osint_data, "feed_detected", False):
+            malicious_score += 2
+            source = getattr(osint_data, "feed_source", "feed local") or "feed local"
+            heuristic_reasons.append(f"🎣 URL en feed de phishing conocido ({source})")
+
+        # ── TIER 1: Google Safe Browsing ────────────────────────────────────────
+        if getattr(osint_data, "safe_browsing_threat", False):
+            malicious_score += 3
+            types = getattr(osint_data, "safe_browsing_types", [])
+            types_str = ", ".join(types) if types else "amenaza detectada"
+            heuristic_reasons.append(f"⚠️ Google Safe Browsing: {types_str}")
+
+
         abuse_score = getattr(osint_data, "abuse_confidence_score", None)
         if abuse_score is not None and abuse_score > 0:
             if abuse_score >= 50:
@@ -332,25 +374,38 @@ async def analyze_url(request: URLRequest = Body(...)):  # noqa: B008
             suspicious_score += 1
             heuristic_reasons.append("Certificado SSL dudoso o autofirmado")
 
+        # ── TIER 2: MACHINE LEARNING (Deep AI Detection) ──────────────────────────
+        heuristic_res = getattr(osint_data, "heuristic_result", None)
+        if heuristic_res and hasattr(heuristic_res, "flags"):
+            for flag in heuristic_res.flags:
+                if "ML_OSINT_CRITICAL" in flag or "ML_STRUCTURE_CRITICAL" in flag:
+                    malicious_score += 4
+                    heuristic_reasons.append(f"🤖 IA Crítica: {flag}")
+                elif "ML_OSINT_HIGH" in flag or "ML_STRUCTURE_HIGH" in flag:
+                    suspicious_score += 2
+                    heuristic_reasons.append(f"🤖 IA Sospechosa: {flag}")
+
         if malicious_score > 0 or suspicious_score > 0:
             vt_stats["malicious"] = malicious_score
             vt_stats["suspicious"] = suspicious_score
             vt_stats["harmless"] = 0
             vt_stats["heuristic_flag"] = " | ".join(heuristic_reasons)
 
-        # Usamos _serialize_osint para que contenga las @property y sea flat
-        ai_summary = await ai_service.generate_analysis_explanation(_serialize_osint(osint_data), "url")
+        # Serializar una única vez — reutilizado para IA y para la respuesta JSON
+        serialized_osint = _serialize_osint(osint_data)
+
+        ai_summary = await ai_service.generate_analysis_explanation(serialized_osint, "url")
 
         result = {
             "type": "url",
             "stats": vt_stats,
             "ai_summary": ai_summary,
-            "osint_data": _serialize_osint(osint_data),  # Fix Caos #1+#2
+            "osint_data": serialized_osint,
             "status": "success"
         }
 
-        # Sobrescribimos el redirect_chain con la cadena completa para mantener la interfaz visual y la trazabilidad
-        if "osint_data" in result and isinstance(result["osint_data"], dict):
+        # Sobrescribimos el redirect_chain con la cadena completa
+        if isinstance(result["osint_data"], dict):
             result["osint_data"]["redirect_chain"] = redirect_chain
 
         if not has_errors:
@@ -470,6 +525,12 @@ async def chat_endpoint(request: ChatRequest = Body(...)):  # noqa: B008
 async def explain_script_endpoint(request: ScriptExplainRequest = Body(...)):  # noqa: B008
     """Explica un script remoto."""
     try:
+        # Comprobación SSRF async (DNS no bloqueante) — igual que analyze_url
+        if not await is_safe_url_async(request.script_url):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La URL del script no es segura. Se detectó un posible intento de SSRF."
+            )
         explanation = await ai_service.explain_script(request.script_url)
         return {"explanation": explanation}
     except HTTPException:

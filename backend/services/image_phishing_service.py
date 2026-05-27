@@ -12,7 +12,7 @@ from utils.openai_client import get_openai_client
 
 logger = logging.getLogger(__name__)
 
-AI_MODEL = os.getenv("AI_MODEL", "gpt-5-mini")
+AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini")
 AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.2"))
 AI_MAX_TOKENS = int(os.getenv("AI_IMAGE_MAX_TOKENS", "400"))
 MAX_OCR_CHARS = int(os.getenv("MAX_OCR_CHARS", "3000"))
@@ -317,7 +317,8 @@ class ImagePhishingService:
                     "confidence": validated.confidence,
                     "verdict": validated.verdict,
                     "red_flags": validated.red_flags,
-                    "extracted_text": extracted_text,
+                    # H-8: Devolver texto sanitizado (con PII enmascarado), no el OCR raw
+                    "extracted_text": sanitized_text,
                     "extracted_urls": extracted_urls,
                 }
             except (json.JSONDecodeError, ValidationError) as exc:
@@ -327,7 +328,8 @@ class ImagePhishingService:
                     "confidence": "Baja",
                     "verdict": _truncate_text(content, 500),
                     "red_flags": [],
-                    "extracted_text": extracted_text,
+                    # H-8: También en fallback, devolver texto sanitizado
+                    "extracted_text": sanitized_text,
                     "extracted_urls": extracted_urls,
                 }
 

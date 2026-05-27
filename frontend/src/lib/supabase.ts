@@ -7,7 +7,8 @@ const globalForSupabase = globalThis as unknown as {
   supabase: SupabaseClient | undefined;
 };
 
+// Fix 15: singleton siempre activo (no solo en dev), evita múltiples instancias en producción
 export const supabase =
   globalForSupabase.supabase ?? createClient(supabaseUrl, supabaseAnonKey);
 
-if (process.env.NODE_ENV !== 'production') globalForSupabase.supabase = supabase;
+globalForSupabase.supabase = supabase;

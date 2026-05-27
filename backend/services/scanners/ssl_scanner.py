@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import socket
 import ssl
 from datetime import datetime, timezone
@@ -59,15 +60,12 @@ def _analyze_issuer(issuer_name: str | None) -> tuple[str | None, bool, bool]:
         indicator in issuer_lower
         for indicator in ("self signed", "self-signed", "localhost", "unknown")
     )
-    # Bug #9 fix: usar palabras completas para "ca" y "root" para evitar
-    # falsos positivos en issuers legítimos como "DigiCert Global CA"
-    import re as _re
     _SUSPICIOUS_EXACT = {"self-signed", "localhost", "example.com", "test", "dummy", "unknown", "none"}
     _SUSPICIOUS_WORD  = {"ca", "root"}
     is_suspicious = (
         is_self_signed
         or any(s in issuer_lower for s in _SUSPICIOUS_EXACT)
-        or any(bool(_re.search(rf"\b{_re.escape(w)}\b", issuer_lower)) for w in _SUSPICIOUS_WORD
+        or any(bool(re.search(rf"\b{re.escape(w)}\b", issuer_lower)) for w in _SUSPICIOUS_WORD
                if issuer_lower == w)  # solo coincidencia exacta para palabras cortas
     )
 
@@ -106,15 +104,18 @@ class SSLScanner:
             logger.warning(f"Validación rechazada: {exc}")
             return None
 
-        def _fetch_cert():
-            context = ssl.create_default_context()
-            with socket.create_connection((safe_hostname, 443), timeout=SSL_TIMEOUT) as sock:
-                with context.wrap_socket(sock, server_hostname=safe_hostname) as ssock:
-                    return ssock.getpeercert(), ssock.cipher()
-
+        context = ssl.create_default_context()
         try:
-            res = await asyncio.to_thread(_fetch_cert)
-            cert, cipher = res if res else (None, None)
+            # H-10: Uso de asyncio.open_connection para evitar bloqueo
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(safe_hostname, 443, ssl=context),
+                timeout=SSL_TIMEOUT
+            )
+            ssock = writer.get_extra_info('ssl_object')
+            cert = ssock.getpeercert()
+            cipher = ssock.cipher()
+            writer.close()
+            await writer.wait_closed()
         except ssl.SSLError as exc:
             logger.info(f"Error SSL en {safe_hostname}: {exc}")
             return SSLData(
@@ -151,7 +152,6 @@ class SSLScanner:
             if is_expired or is_expiring_soon:
                 is_suspicious = True
 
-            import re
             if cipher_name and re.search(r"\b(RC4|3DES|DES|MD5)\b", cipher_name):
                 is_suspicious = True
             if ssl_version and ssl_version in ("SSLv2", "SSLv3", "TLSv1", "TLSv1.1"):

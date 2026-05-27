@@ -35,13 +35,16 @@ export function useAiChat(scanResult: ScanResult) {
         scan_context: scanResult
       });
 
+      // Fix 9: leer estado fresco del store en el callback, no el closure de updatedMessages
+      const freshMessages = useThreatStore.getState().chats[chatId] || [];
       if (response.data.reply) {
-        saveChat(chatId, [...updatedMessages, { role: 'assistant', content: response.data.reply }]);
+        saveChat(chatId, [...freshMessages, { role: 'assistant', content: response.data.reply }]);
       } else {
-        saveChat(chatId, [...updatedMessages, { role: 'assistant', content: "Lo siento, ocurrió un error procesando tu solicitud." }]);
+        saveChat(chatId, [...freshMessages, { role: 'assistant', content: 'Lo siento, ocurrió un error procesando tu solicitud.' }]);
       }
     } catch {
-      saveChat(chatId, [...updatedMessages, { role: 'assistant', content: "Error de conexión con el servidor IA." }]);
+      const freshMessages = useThreatStore.getState().chats[chatId] || [];
+      saveChat(chatId, [...freshMessages, { role: 'assistant', content: 'Error de conexión con el servidor IA.' }]);
     } finally {
       setIsChatLoading(false);
       isSubmittingRef.current = false;

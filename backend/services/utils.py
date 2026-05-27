@@ -6,15 +6,39 @@ import json
 import logging
 import math
 import os
+import re
 import socket
 from collections import Counter
 from typing import Any
 from urllib.parse import urlparse
+from functools import lru_cache
 
 import filetype
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# --- Load Brands from JSON ---
+def _load_target_brands() -> list[tuple[str, set[str], set[str]]]:
+    brands_list = []
+    try:
+        # Resolves to backend/data/brands.json
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        json_path = os.path.join(base_dir, "data", "brands.json")
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            for brand in data.get("brands", []):
+                name = brand.get("name", "")
+                tlds = set(brand.get("tlds", []))
+                subdomains = set(brand.get("subdomains", []))
+                if name:
+                    brands_list.append((name, tlds, subdomains))
+    except Exception as e:
+        logger.error(f"Error cargando brands.json: {e}. Usando lista por defecto.")
+        brands_list = [("google", {"com", "es"}, {"googleapis"})]
+    return brands_list
+
+TARGET_BRANDS_DETAILED = _load_target_brands()
 
 def _load_list_from_env(env_var: str, default: list[str]) -> list[str]:
     """Carga una lista desde variable de entorno (JSON) o usa defaults."""
@@ -261,7 +285,8 @@ async def is_safe_url_async(url: str) -> bool:
             pass
 
         # ── Resolución DNS no bloqueante ──────────────────────────────────
-        loop = asyncio.get_event_loop()
+        # H-3: get_event_loop() deprecated en Python 3.10+ — usar get_running_loop()
+        loop = asyncio.get_running_loop()
         addr_info = await loop.getaddrinfo(hostname, None)
         for _, _, _, _, sockaddr in addr_info:
             if _is_reserved_ip(sockaddr[0]):
@@ -370,6 +395,8 @@ async def resolve_redirect_chain(url: str, timeout: float = 8.0, max_redirects: 
     try:
         async with httpx.AsyncClient(verify=True, follow_redirects=False, timeout=timeout, headers=headers) as client:
             for _ in range(max_redirects):
+                status_code = 0
+                resp_headers: dict = {}
                 try:
                     response = await client.head(current_url, timeout=timeout)
                     if response.status_code in (405, 501, 400):

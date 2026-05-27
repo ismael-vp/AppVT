@@ -1,12 +1,15 @@
 import logging
 import math
 import re
+import os
 from typing import Any
 from urllib.parse import urlparse
+from collections import Counter
 
 import tldextract
 
-from services.utils import calculate_risk_level, levenshtein_similarity
+from services.utils import calculate_risk_level, levenshtein_similarity, TARGET_BRANDS_DETAILED
+from services.ml_analyzer import analyze_structure_with_ml
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +19,7 @@ LEVENSHTEIN_THRESHOLD = 0.80
 MIN_WORD_LENGTH = 5
 
 SUSPICIOUS_KEYWORDS: list[tuple[str, int, str]] = [
+    # --- Inglés ---
     ("login", 15, "Login"),
     ("verify", 15, "Verify"),
     ("secure", 10, "Secure"),
@@ -35,6 +39,47 @@ SUSPICIOUS_KEYWORDS: list[tuple[str, int, str]] = [
     ("payment", 10, "Payment"),
     ("bank", 10, "Bank"),
     ("crypto", 10, "Crypto"),
+
+    # --- Español ---
+    ("acceder", 15, "Login (ES)"),
+    ("iniciar", 15, "Login (ES)"),
+    ("sesion", 15, "Login (ES)"),
+    ("verificar", 15, "Verify (ES)"),
+    ("seguro", 10, "Secure (ES)"),
+    ("cuenta", 15, "Account (ES)"),
+    ("actualizar", 10, "Update (ES)"),
+    ("factura", 15, "Billing (ES)"),
+    ("confirmar", 10, "Confirm (ES)"),
+    ("soporte", 5, "Support (ES)"),
+    ("billetera", 10, "Wallet (ES)"),
+    ("cartera", 10, "Wallet (ES)"),
+    ("recuperacion", 10, "Recovery (ES)"),
+    ("pago", 10, "Payment (ES)"),
+    ("banco", 10, "Bank (ES)"),
+    ("bloqueada", 15, "Blocked (ES)"),
+    ("reembolso", 15, "Refund (ES)"),
+
+    # --- Francés ---
+    ("connexion", 15, "Login (FR)"),
+    ("compte", 10, "Account (FR)"),
+    ("verifier", 10, "Verify (FR)"),
+    ("securite", 10, "Security (FR)"),
+    ("paiement", 10, "Payment (FR)"),
+    ("facture", 15, "Billing (FR)"),
+
+    # --- Portugués ---
+    ("entrar", 15, "Login (PT)"),
+    ("conta", 10, "Account (PT)"),
+    ("verificar", 10, "Verify (PT)"),
+    ("seguranca", 10, "Security (PT)"),
+    ("pagamento", 10, "Payment (PT)"),
+
+    # --- Alemán ---
+    ("anmelden", 15, "Login (DE)"),
+    ("konto", 10, "Account (DE)"),
+    ("bestaetigen", 10, "Confirm (DE)"),
+    ("sicherheit", 10, "Security (DE)"),
+    ("rechnung", 15, "Billing (DE)")
 ]
 
 ABUSED_FREE_HOSTING: list[tuple[str, int]] = [
@@ -64,34 +109,6 @@ ABUSED_FREE_HOSTING: list[tuple[str, int]] = [
     ("bitbucket.io", 20),
 ]
 
-TARGET_BRANDS: list[tuple[str, set[str], set[str]]] = [
-    ("google", {"com", "co.uk", "de", "fr", "es", "it", "co.jp", "com.br", "com.mx", "co.in"}, {"googleapis", "googleusercontent", "gstatic", "youtube", "googlevideo"}),
-    ("facebook", {"com", "co.uk", "de", "fr", "es"}, {"fbcdn", "instagram", "whatsapp"}),
-    ("amazon", {"com", "co.uk", "de", "fr", "es", "it", "co.jp", "com.br", "com.mx", "in", "ca", "com.au"}, {"aws", "cloudfront"}),
-    ("apple", {"com", "co.uk"}, {"icloud", "me", "mzstatic"}),
-    ("microsoft", {"com", "co.uk", "de", "fr", "es"}, {"azure", "office", "live", "hotmail", "outlook", "skype", "bing", "msn"}),
-    ("netflix", {"com", "co.uk", "de", "fr", "es", "co.jp"}, set()),
-    ("paypal", {"com", "co.uk", "de", "fr", "es", "it", "co.jp", "com.br", "com.mx"}, set()),
-    ("bankofamerica", {"com"}, set()),
-    ("chase", {"com"}, set()),
-    ("wellsfargo", {"com"}, set()),
-    ("citibank", {"com"}, set()),
-    ("hsbc", {"com", "co.uk"}, set()),
-    ("barclays", {"co.uk"}, set()),
-    ("santander", {"com", "co.uk", "es"}, set()),
-    ("bbva", {"com", "es"}, set()),
-    ("coinbase", {"com"}, set()),
-    ("kraken", {"com"}, set()),
-    ("metamask", {"io"}, set()),
-    ("trustwallet", {"com"}, set()),
-    ("ledger", {"com"}, set()),
-    ("trezor", {"io"}, set()),
-    ("binance", {"com", "us"}, set()),
-]
-
-# levenshtein_distance y _levenshtein_similarity se importan desde services.utils
-# (lru_cache compartida, 10 000 slots, sin duplicación de memoria)
-
 def _validate_url(url: str) -> str:
     """Valida y normaliza una URL."""
     if not url or not isinstance(url, str):
@@ -119,10 +136,7 @@ def _calculate_normalized_entropy(text: str) -> float:
     if length <= 1:
         return 0.0
 
-    counts: dict[str, int] = {}
-    for char in text:
-        counts[char] = counts.get(char, 0) + 1
-
+    counts = Counter(text)
     entropy = 0.0
     for count in counts.values():
         p = count / length
@@ -131,24 +145,23 @@ def _calculate_normalized_entropy(text: str) -> float:
     max_entropy = math.log2(length)
     return entropy / max_entropy if max_entropy > 0 else 0.0
 
-def _detect_free_hosting(hostname: str) -> tuple[bool, list[str], int]:
+def _detect_free_hosting(hostname: str) -> tuple[bool, list[str]]:
     """Detecta si el hostname usa un hosting gratuito abusado."""
-    for domain, score in ABUSED_FREE_HOSTING:
+    for domain, _ in ABUSED_FREE_HOSTING:
         if hostname == domain or hostname.endswith("." + domain):
-            return True, [f"ABUSED_FREE_HOSTING ({domain})"], score
-    return False, [], 0
+            return True, [f"ABUSED_FREE_HOSTING ({domain})"]
+    return False, []
 
-def _detect_brand_impersonation(hostname: str, path: str) -> tuple[list[str], int]:
+def _detect_brand_impersonation(hostname: str, path: str) -> list[str]:
     """Detecta suplantación de marca en hostname o path."""
     flags: list[str] = []
-    score = 0
     hostname_lower = hostname.lower()
     path_lower = path.lower()
 
     # tldextract una única vez fuera del bucle (evita 14 llamadas por URL)
     extracted = tldextract.extract(hostname_lower)
 
-    for brand, official_tlds, official_subdomains in TARGET_BRANDS:
+    for brand, official_tlds, official_subdomains in TARGET_BRANDS_DETAILED:
         brand_lower = brand.lower()
 
         # Evitar falsos positivos como "apple" dentro de "snapple.com"
@@ -177,59 +190,53 @@ def _detect_brand_impersonation(hostname: str, path: str) -> tuple[list[str], in
 
         if in_hostname:
             flags.append(f"BRAND_IMPERSONATION_IN_HOSTNAME ({brand})")
-            score += 45
         elif in_path:
             flags.append(f"BRAND_IMPERSONATION_IN_PATH ({brand})")
-            score += 35
         break
 
-    return flags, score
+    return flags
 
-def _detect_entropy_and_dga(subdomain: str) -> tuple[list[str], int]:
+def _detect_entropy_and_dga(subdomain: str) -> list[str]:
     """Detecta subdominios con alta entropía (posible DGA)."""
     if not subdomain or len(subdomain) < 5:
-        return [], 0
+        return []
 
     norm_entropy = _calculate_normalized_entropy(subdomain)
     has_consecutive_numbers = bool(re.search(r"\d{4,}", subdomain))
 
     if norm_entropy > ENTROPY_THRESHOLD or has_consecutive_numbers:
         confidence = f"entropy={norm_entropy:.2f}" if norm_entropy > ENTROPY_THRESHOLD else "consecutive_numbers"
-        return [f"HIGH_ENTROPY_SUBDOMAIN ({confidence})"], 15
+        return [f"HIGH_ENTROPY_SUBDOMAIN ({confidence})"]
 
-    return [], 0
+    return []
 
-def _detect_suspicious_keywords(subdomain: str, path: str) -> tuple[list[str], int]:
+def _detect_suspicious_keywords(subdomain: str, path: str) -> list[str]:
     """Detecta keywords sospechosas y typos de keywords."""
     combined = f"{subdomain} {path}".lower()
     words = re.split(r"[^a-z0-9]", combined)
 
     found: list[str] = []
-    total_score = 0
 
     for word in words:
         if not word or len(word) < MIN_WORD_LENGTH:
             continue
 
-        for kw, score, label in SUSPICIOUS_KEYWORDS:
+        for kw, _, label in SUSPICIOUS_KEYWORDS:
             if word == kw:
                 found.append(label)
-                total_score += score
                 break
         else:
-            for kw, score, label in SUSPICIOUS_KEYWORDS:
+            for kw, _, label in SUSPICIOUS_KEYWORDS:
                 sim = levenshtein_similarity(word, kw)
                 if sim >= LEVENSHTEIN_THRESHOLD and word != kw:
                     found.append(f"{label} (typo: {word})")
-                    total_score += score
                     break
 
     if not found:
-        return [], 0
+        return []
 
     unique_found = list(dict.fromkeys(found))
-    flags = [f"SUSPICIOUS_KEYWORD ({kw})" for kw in unique_found]
-    return flags, min(total_score, 50)
+    return [f"SUSPICIOUS_KEYWORD ({kw})" for kw in unique_found]
 
 class URLStructureAnalyzer:
     """Analizador avanzado de estructura de URLs."""
@@ -250,26 +257,29 @@ class URLStructureAnalyzer:
         subdomain = extracted.subdomain
 
         flags: list[str] = []
-        risk_score = 0
 
-        is_free_hosting, fh_flags, fh_score = _detect_free_hosting(hostname)
+        is_free_hosting, fh_flags = _detect_free_hosting(hostname)
         flags.extend(fh_flags)
-        risk_score += fh_score
 
-        bi_flags, bi_score = _detect_brand_impersonation(hostname, path)
+        bi_flags = _detect_brand_impersonation(hostname, path)
         flags.extend(bi_flags)
-        risk_score += bi_score
 
         entropy_target = subdomain if not is_free_hosting else extracted.domain
-        ent_flags, ent_score = _detect_entropy_and_dga(entropy_target)
+        ent_flags = _detect_entropy_and_dga(entropy_target)
         flags.extend(ent_flags)
-        risk_score += ent_score
 
-        kw_flags, kw_score = _detect_suspicious_keywords(subdomain, path)
+        kw_flags = _detect_suspicious_keywords(subdomain, path)
         flags.extend(kw_flags)
-        risk_score += kw_score
 
-        risk_score = max(0, min(risk_score, 100))
+        # === Machine Learning Estructural ===
+        # Delegamos TODO el peso del riesgo estructural a la IA
+        ml_results = analyze_structure_with_ml(url)
+        risk_score = ml_results.get("ml_score", 0)
+        
+        if ml_results.get("flags"):
+            flags.extend(ml_results["flags"])
+
+        risk_score = max(0, min(int(risk_score), 100))
         level = calculate_risk_level(risk_score)
 
         return {"risk_score": risk_score, "level": level, "flags": flags}

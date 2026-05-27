@@ -12,7 +12,7 @@ from utils.openai_client import get_openai_client
 
 logger = logging.getLogger(__name__)
 
-AI_MODEL = os.getenv("AI_MODEL", "gpt-5-mini")
+AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini")
 AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.3"))
 AI_MAX_TOKENS_DEFAULT = int(os.getenv("AI_MAX_TOKENS", "400"))
 AI_MAX_TOKENS_CHAT = int(os.getenv("AI_MAX_TOKENS_CHAT", "300"))

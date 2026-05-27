@@ -25,18 +25,28 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ badges: {} });
     }
 
+    // M-13: Validar que cada ID sea un UUID v4 válido y limitar el tamaño del batch
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const safeUserIds = userIds
+      .filter(id => UUID_REGEX.test(id))
+      .slice(0, 100); // máx 100 IDs por batch
+
+    if (safeUserIds.length === 0) {
+      return NextResponse.json({ badges: {} });
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Obtener los conteos para estos usuarios usando service_role para saltar RLS
     const { data: reports, error } = await supabase
       .from('scan_reports')
       .select('user_id')
-      .in('user_id', userIds);
+      .in('user_id', safeUserIds);
 
     if (error) throw error;
 
     const counts: Record<string, number> = {};
-    for (const uid of userIds) {
+    for (const uid of safeUserIds) {
       counts[uid] = 0;
     }
 
@@ -48,7 +58,7 @@ export async function GET(req: NextRequest) {
     }
 
     const badges: Record<string, string> = {};
-    for (const uid of userIds) {
+    for (const uid of safeUserIds) {
       badges[uid] = getBadge(counts[uid]);
     }
 

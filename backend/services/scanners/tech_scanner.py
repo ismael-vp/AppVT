@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 from models.osint_models import PrivacyData, TechData
-from services.utils import is_safe_url
+from services.utils import is_safe_url, is_safe_url_async
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +122,8 @@ FINGERPRINTING_PATTERNS: list[tuple[str, str]] = [
     ("screen.colordepth", "Huella Digital Gráfica (Color Depth)"),
 ]
 
-async def _is_safe_url_async(url: str) -> bool:
-    """Wrapper async que ejecuta la validación en thread."""
-    return await asyncio.to_thread(is_safe_url, url)
+# M-11: _is_safe_url_async eliminado — usar is_safe_url_async de services.utils directamente
+# (usa asyncio.get_running_loop().getaddrinfo — no bloquante, no consume thread pool)
 
 def _is_safe_redirect(url: str) -> bool:
     """Valida que una URL de redirección sea segura."""
@@ -266,7 +265,7 @@ class TechScanner:
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
 
-        if not await _is_safe_url_async(url):
+        if not await is_safe_url_async(url):
             logger.warning(f"Intento de SSRF bloqueado: {url}")
             return result
 
@@ -303,7 +302,7 @@ class TechScanner:
                                 break
                             from urllib.parse import urljoin
                             next_url = urljoin(current_url, location)
-                            if not await _is_safe_url_async(next_url):
+                            if not await is_safe_url_async(next_url):
                                 break
                             redirect_chain.append(next_url)
                             current_url = next_url

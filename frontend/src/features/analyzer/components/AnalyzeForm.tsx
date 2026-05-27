@@ -95,7 +95,6 @@ function AnalyzeFormInner() {
     return () => clearInterval(interval);
   }, [isScanning, mode]);
 
-  // --- COMPRESIÓN DE IMÁGENES CLIENT-SIDE ---
   const handleImageSelection = (file: File) => {
     if (!file.type.startsWith('image/')) return;
     const img = new Image();
@@ -103,6 +102,9 @@ function AnalyzeFormInner() {
     img.src = objectUrl;
 
     img.onload = () => {
+      // Revocar inmediatamente tras cargar — el useEffect crear\u00e1 su propio objectUrl para el preview
+      URL.revokeObjectURL(objectUrl);
+
       const canvas = document.createElement('canvas');
       const MAX_WIDTH = 1200;
       const MAX_HEIGHT = 1200;
@@ -136,13 +138,12 @@ function AnalyzeFormInner() {
         } else {
           setImageInput(file);
         }
-        URL.revokeObjectURL(objectUrl);
       }, 'image/jpeg', 0.85);
     };
 
     img.onerror = () => {
-      setImageInput(file);
       URL.revokeObjectURL(objectUrl);
+      setImageInput(file);
     };
   };
 

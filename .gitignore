@@ -58,3 +58,8 @@ env/
 *.db
 *.db-shm
 *.db-wal
+
+# Datasets & ML Data
+*.csv
+backend/data/
+phishing-links-*.txt

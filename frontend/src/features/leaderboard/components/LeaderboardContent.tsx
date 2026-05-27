@@ -37,10 +37,18 @@ export default function LeaderboardContent() {
 
   useEffect(() => {
     fetch('/api/leaderboard')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok && r.headers.get('content-type')?.includes('text/html')) {
+          throw new Error('El servidor no está disponible. Inténtalo más tarde.');
+        }
+        return r.json();
+      })
       .then(data => {
-        if (data.error) throw new Error(data.error);
+        // Si el servidor devuelve un error pero también el leaderboard (vacío), lo mostramos sin error
         setEntries(data.leaderboard || []);
+        if (data.error && !data.leaderboard) {
+          throw new Error(data.error);
+        }
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));

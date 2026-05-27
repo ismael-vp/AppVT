@@ -41,7 +41,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // C-3: Validar el ID de GTM antes de inyectarlo en dangerouslySetInnerHTML
   const gtmId = process.env.NEXT_PUBLIC_GTM_ID;
+  const safeGtmId = /^GTM-[A-Z0-9]+$/.test(gtmId ?? '') ? gtmId : null;
 
   return (
     <html
@@ -51,23 +53,23 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
-        {gtmId && (
+        {safeGtmId && (
           <script
             dangerouslySetInnerHTML={{
               __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
               new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
               j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
               'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-              })(window,document,'script','dataLayer','${gtmId}');`
+              })(window,document,'script','dataLayer','${safeGtmId}');`
             }}
           />
         )}
       </head>
       <body className="min-h-full flex flex-col bg-[#080808]" suppressHydrationWarning>
-        {gtmId && (
+        {safeGtmId && (
           <noscript>
             <iframe
-              src={`https://www.googletagmanager.com/ns.html?id=${gtmId}`}
+              src={`https://www.googletagmanager.com/ns.html?id=${safeGtmId}`}
               height="0"
               width="0"
               style={{ display: 'none', visibility: 'hidden' }}
@@ -79,14 +81,7 @@ export default function RootLayout({
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(
-                    function(registration) {
-                      console.log('ServiceWorker registration successful');
-                    },
-                    function(err) {
-                      console.log('ServiceWorker registration failed: ', err);
-                    }
-                  );
+                  navigator.serviceWorker.register('/sw.js');
                 });
               }
             `,

@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 from typing import Any
 
+import tldextract
+
 from models.osint_models import (
     HeuristicResult,
     TyposquattingData,
@@ -11,7 +13,49 @@ from models.osint_models import (
 )
 from services.scanners.typosquatting_scanner import TyposquattingScanner
 from services.scanners.url_structure_analyzer import URLStructureAnalyzer
-from services.utils import calculate_risk_level
+from services.utils import calculate_risk_level, TARGET_BRANDS
+
+# Mapa de ownership legítimo de marca:
+# clave   = nombre de marca (lowercase, igual que en TARGET_BRANDS)
+# valor   = set de dominios registrados (tldextract.domain) que son dueños legítimos
+# Úsate para evitar falsos positivos cuando una marca aparece en el dominio de su empresa madre.
+# Ejemplo: Gmail (gmail) es propiedad de Google (google) → google.com no es suplantación de Gmail.
+BRAND_LEGITIMATE_OWNERS: dict[str, set[str]] = {
+    # Google ecosystem
+    "gmail":      {"google", "gmail", "googlemail"},
+    "youtube":    {"google", "youtube"},
+    "maps":       {"google"},
+    "drive":      {"google"},
+    "docs":       {"google"},
+    "chrome":     {"google"},
+    "android":    {"google"},
+    "google":     {"google"},
+    # Microsoft ecosystem
+    "outlook":    {"microsoft", "outlook", "live", "hotmail", "office"},
+    "teams":      {"microsoft"},
+    "onedrive":   {"microsoft"},
+    "azure":      {"microsoft", "azure"},
+    "bing":       {"microsoft", "bing"},
+    "microsoft":  {"microsoft"},
+    # Meta ecosystem
+    "instagram":  {"instagram", "facebook", "meta"},
+    "whatsapp":   {"whatsapp", "facebook", "meta"},
+    "messenger":  {"facebook", "meta"},
+    "facebook":   {"facebook", "meta"},
+    # Apple ecosystem
+    "icloud":     {"apple", "icloud"},
+    "apple":      {"apple"},
+    # Amazon ecosystem
+    "aws":        {"amazon", "aws"},
+    "amazon":     {"amazon"},
+    # LinkedIn / Microsoft
+    "linkedin":   {"linkedin", "microsoft"},
+    # Twitter/X
+    "twitter":    {"twitter", "x"},
+    "x":          {"twitter", "x"},
+    # Binance
+    "binance":    {"binance"},
+}
 
 logger = logging.getLogger(__name__)
 
@@ -126,34 +170,57 @@ class HeuristicScanner:
                 logger.error(f"Error calculando edad del dominio: {e}")
 
         if osint_data and osint_data.tech_data:
+            # M-X: Desactivados los incrementos directos de riesgo por obfuscated_js y anti_bot
+            # a petición del usuario. Son demasiado comunes en webs legítimas (webpack, CF WAF)
+            # y generan falsos positivos inaceptables sin aportar valor real por sí solos.
             if osint_data.tech_data.is_obfuscated_js:
-                base_score += 30
-                flags.append("OBFUSCATED_JS_DETECTED")
+                logger.debug(f"Ofuscación JS detectada en {extracted_hostname} - ignorado para puntaje heurístico")
+            
             if osint_data.tech_data.anti_bot_detected:
-                base_score += 25
-                flags.append("ANTI_BOT_EVASION_DETECTED")
+                logger.debug(f"Anti-Bot detectado en {extracted_hostname} - ignorado para puntaje heurístico")
 
             if osint_data.tech_data.ocr_extracted_brands:
                 html_lower = osint_data.tech_data.html_content.lower() if osint_data.tech_data.html_content else ""
-                has_login_indicators = "password" in html_lower or 'type="password"' in html_lower or "<form" in html_lower
+                has_login_indicators = (
+                    'type="password"' in html_lower
+                    or "type='password'" in html_lower
+                    or ("password" in html_lower and "<form" in html_lower)
+                )
 
-                import tldextract
+                # M-3: tldextract ya importado a nivel de módulo; eliminado import duplicado y dead assignment
                 extracted = tldextract.extract(extracted_hostname)
+                scanned_domain = extracted.domain.lower()  # ej. "google"
 
                 for brand in osint_data.tech_data.ocr_extracted_brands:
-                    from services.utils import TARGET_BRANDS
                     official_domain = TARGET_BRANDS.get(brand, brand)
-                    
                     brand_lower = brand.lower()
-                    
-                    # Si el dominio base coincide exactamente con la marca (ej. google.es -> google)
-                    # asumimos que es una variante regional legítima y no suplantación.
-                    if extracted.domain == brand_lower:
+
+                    # 1️⃣  El dominio escaneado coincide exactamente con la marca
+                    #    (ej. google.com escaneando "google")
+                    if scanned_domain == brand_lower:
                         continue
-                    
-                    if official_domain not in extracted_hostname:
+
+                    # 2️⃣  El dominio escaneado es dueño legítimo de la marca detectada
+                    #    (ej. google.com mostrando "Gmail", microsoft.com mostrando "Outlook")
+                    legitimate_owners = BRAND_LEGITIMATE_OWNERS.get(brand_lower, set())
+                    if scanned_domain in legitimate_owners:
+                        continue
+
+                    # 3️⃣  El official_domain de la marca aparece en el hostname
+                    #    (ej. m.gmail.com escaneando "gmail")
+                    if official_domain and official_domain in extracted_hostname:
+                        continue
+
+                    # ⚠️ Solo flagear si hay indicadores de login activos en la página.
+                    # Una marca en el logo/footer sin form de contraseña NO es suplantación.
+                    if has_login_indicators:
                         base_score += 85
                         flags.append(f"VISUAL_BRAND_IMPERSONATION (Marca detectada: {brand.capitalize()})")
+                    else:
+                        # Indicador suave: marca presente pero sin login form
+                        logger.debug(
+                            f"Marca '{brand}' detectada en {extracted_hostname} sin indicadores de login — no se penaliza"
+                        )
 
         if osint_data and osint_data.ssl:
             if osint_data.ssl.is_suspicious:
@@ -164,9 +231,12 @@ class HeuristicScanner:
                     flags.append("SUSPICIOUS_SSL")
 
         if osint_data and osint_data.geolocation and osint_data.geolocation.asn:
-            suspicious_asns = ["AS20473", "AS16276", "AS14061", "AS4134", "AS4837", "AS5089", "AS206446"]
+            # H-9: Eliminados AS14061 (DigitalOcean), AS16276 (OVH), AS20473 (Vultr) —
+            # hospedan millones de sitios legítimos y generan falsos positivos masivos.
+            # Se mantienen solo carriers chinos de estado y hosting tipo bulletproof documentados.
+            suspicious_asns = ["AS4134", "AS4837", "AS5089", "AS206446"]
             if any(asn in osint_data.geolocation.asn for asn in suspicious_asns):
-                base_score += 30
+                base_score += 10  # penalización reducida: solo indicador débil
                 flags.append(f"SUSPICIOUS_ASN ({osint_data.geolocation.asn})")
 
         final_score = max(MIN_RISK_SCORE, min(base_score, MAX_RISK_SCORE))

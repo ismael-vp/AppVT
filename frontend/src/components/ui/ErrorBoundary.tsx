@@ -20,7 +20,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error:', error, errorInfo);
+    if (process.env.NODE_ENV === 'production') {
+      // En producción no exponer stack traces en la consola del navegador
+      const errorId = Math.random().toString(36).slice(2, 10).toUpperCase();
+      console.error(`[ErrorBoundary] Error capturado [${errorId}]: ${error.message}`);
+    } else {
+      console.error('Uncaught error:', error, errorInfo);
+    }
   }
 
   public render() {

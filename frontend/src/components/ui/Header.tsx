@@ -12,19 +12,20 @@ export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
 
+  // Ambos hooks DEBEN estar antes de cualquier return condicional (Rules of Hooks)
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
-
-  if (pathname.startsWith('/report/')) {
-    return null;
-  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 2);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  if (pathname.startsWith('/report/')) {
+    return null;
+  }
 
   const navLinks = [
     { name: 'Inicio', href: '/' },

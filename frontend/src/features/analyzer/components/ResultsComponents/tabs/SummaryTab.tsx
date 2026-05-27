@@ -7,6 +7,7 @@ import HeuristicRiskCard from '@/features/analyzer/components/ResultsComponents/
 import SecurityVerdict from '@/features/analyzer/components/ResultsComponents/ui/SecurityVerdict';
 import AiChatPanel from '@/features/analyzer/components/ResultsComponents/ui/AiChatPanel';
 import SecureCaptureCard from '@/features/analyzer/components/ResultsComponents/cards/SecureCaptureCard';
+import ThreatDetectionBanner from '@/features/analyzer/components/ResultsComponents/ui/ThreatDetectionBanner';
 
 import { ChatMessage } from '@/store/useThreatStore';
 
@@ -45,6 +46,20 @@ export default function SummaryTab({
         <SecurityVerdict scanResult={scanResult} />
       </div>
 
+      {/* Banner de detección por fuentes externas (GSB / OpenPhish / PhishTank / DNS) */}
+      {type === 'url' && (
+        <ThreatDetectionBanner
+          safeBrowsingThreat={osint_data?.safe_browsing_threat}
+          safeBrowsingTypes={osint_data?.safe_browsing_types}
+          safeBrowsingChecked={osint_data?.safe_browsing_checked}
+          feedDetected={osint_data?.feed_detected}
+          feedSource={osint_data?.feed_source}
+          spamhausListed={osint_data?.dns?.spamhaus_listed}
+          surblListed={osint_data?.dns?.surbl_listed}
+          blacklistDetails={osint_data?.dns?.blacklist_details}
+        />
+      )}
+
       {/* Bloque de Evidencias Técnicas */}
       <div className="flex flex-col gap-6">
         {/* Componente Unificado de Alertas de Riesgo */}
@@ -58,8 +73,7 @@ export default function SummaryTab({
         {/* Fallback para Análisis de Anatomía (Legacy) */}
         {type === 'url' && !osint_data?.heuristic_result && osint_data?.url_anatomy && (
           <UrlAnatomyCard 
-            anatomy={osint_data.url_anatomy} 
-            isTyposquatting={osint_data.is_typosquatting}
+            osintData={osint_data}
           />
         )}
 

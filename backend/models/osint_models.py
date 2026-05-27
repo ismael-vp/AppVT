@@ -71,6 +71,14 @@ class DNSData(BaseModel):
     txt_records: list[str] = Field(default_factory=list)
     mx_records: list[str] = Field(default_factory=list)
     has_mx: bool = Field(False, description="True si tiene registros MX (servidores de correo)")
+    # Blacklists DNS
+    spamhaus_listed: bool = Field(False, description="True si el dominio está en Spamhaus DBL")
+    surbl_listed: bool = Field(False, description="True si el dominio está en SURBL")
+    blacklist_details: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Detalles de las blacklists que detectaron el dominio"
+    )
 
 class WhoisData(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -224,6 +232,17 @@ class OSINTResponse(BaseModel):
     screenshot_desktop: str | None = Field(None, max_length=MAX_SCREENSHOT_LENGTH)
     screenshot_mobile: str | None = Field(None, max_length=MAX_SCREENSHOT_LENGTH)
     is_mobile_optimized: bool = True
+    # Google Safe Browsing
+    safe_browsing_threat: bool = Field(False, description="True si GSB detectó una amenaza")
+    safe_browsing_types: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Tipos de amenaza reportados por GSB (MALWARE, SOCIAL_ENGINEERING, etc.)"
+    )
+    safe_browsing_checked: bool = Field(False, description="True si GSB fue consultado correctamente")
+    # Feeds locales de phishing (OpenPhish / PhishTank)
+    feed_detected: bool = Field(False, description="True si la URL fue encontrada en un feed local")
+    feed_source: str | None = Field(None, max_length=50, description="Nombre del feed que detectó la URL")
 
     @property
     def redirect_chain(self) -> list[str]:

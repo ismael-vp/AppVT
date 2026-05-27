@@ -3,6 +3,9 @@ import dynamic from 'next/dynamic';
 import { ScanResult } from '@/types';
 import TechStackCard from '@/features/analyzer/components/ResultsComponents/cards/TechStackCard';
 import UrlMetadataCard from '@/features/analyzer/components/ResultsComponents/cards/UrlMetadataCard';
+import ThreatIntelCard from '@/features/analyzer/components/ResultsComponents/cards/ThreatIntelCard';
+import UrlAnatomyCard from '@/features/analyzer/components/ResultsComponents/cards/UrlAnatomyCard';
+import PrivacyCard from '@/features/analyzer/components/ResultsComponents/cards/PrivacyCard';
 import type { ThreatMapProps } from '@/features/threat-map/components/ThreatMap';
 
 // Lazy-load ThreatMap: renderiza ~200 SVG paths síncronos que colapsan la CPU.
@@ -40,6 +43,19 @@ export default function TechnicalTab({ scanResult, isMalicious, onExplainScript 
         />
       )}
 
+      {/* Inteligencia de Amenazas y Estructura */}
+      {type === 'url' && (
+        <>
+          <ThreatIntelCard osintData={osint_data} />
+          <UrlAnatomyCard osintData={osint_data} />
+        </>
+      )}
+
+      {/* Privacidad y Rastreo */}
+      {type === 'url' && osint_data?.privacy_analysis && (
+        <PrivacyCard osintData={osint_data} />
+      )}
+
       {/* Mapa de Geolocalización (Solo URLs) — carga diferida para no bloquear el render */}
       {type === 'url' && osint_data?.geolocation?.lat && osint_data?.geolocation?.lon && (
         <div>
@@ -58,7 +74,6 @@ export default function TechnicalTab({ scanResult, isMalicious, onExplainScript 
       {/* Tech Stack y Scripts */}
       {type === 'url' && osint_data && (
         <TechStackCard 
-          technologies={osint_data.technologies} 
           externalScripts={osint_data.external_scripts} 
           onExplainScript={onExplainScript} 
         />

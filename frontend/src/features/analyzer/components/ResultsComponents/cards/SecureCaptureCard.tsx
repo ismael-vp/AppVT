@@ -54,6 +54,8 @@ export default function SecureCaptureCard({ osintData, safeUrl }: SecureCaptureC
             onClick={() => {
               if (activeView !== 'desktop') {
                 setActiveView('desktop');
+                // M-4: resetear forceMobileView al volver a Desktop
+                setForceMobileView(false);
                 if (desktopUrl) {
                   setIsLoading(true);
                   setHasError(false);
@@ -65,6 +67,8 @@ export default function SecureCaptureCard({ osintData, safeUrl }: SecureCaptureC
                 ? 'bg-zinc-800 text-zinc-100 shadow-sm'
                 : 'text-zinc-500 hover:text-zinc-300'
             }`}
+            aria-label="Vista desktop"
+            aria-pressed={activeView === 'desktop'}
           >
             <Monitor size={14} />
             <span>Desktop</span>
@@ -84,6 +88,8 @@ export default function SecureCaptureCard({ osintData, safeUrl }: SecureCaptureC
                 ? 'bg-zinc-800 text-zinc-100 shadow-sm'
                 : 'text-zinc-500 hover:text-zinc-300'
             }`}
+            aria-label="Vista móvil"
+            aria-pressed={activeView === 'mobile'}
           >
             <Smartphone size={14} />
             <span>Mobile</span>
