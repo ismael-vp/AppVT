@@ -41,7 +41,7 @@ tldextract>=5.1.1
 dnspython>=2.6.0
 
 # --- YAML (versión segura) ---
-PyYAML>=6.0.1
+PyYAML>=6.0.3
 
 # --- Machine Learning ---
 scikit-learn>=1.4.0
