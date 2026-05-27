@@ -61,5 +61,6 @@ env/
 
 # Datasets & ML Data
 *.csv
-backend/data/
+backend/data/*
+!backend/data/brands.json
 phishing-links-*.txt
