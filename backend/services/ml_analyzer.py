@@ -5,8 +5,9 @@ import re
 from collections import Counter
 from datetime import datetime, timezone
 
+import warnings
+
 import joblib
-import pandas as pd
 
 from models.osint_models import OSINTResponse
 from services.advanced_features import extract_advanced_features
@@ -141,8 +142,10 @@ def analyze_structure_with_ml(url: str) -> dict:
         if not features:
             return {"ml_score": 0, "flags": []}
 
-        features_df = pd.DataFrame([features], columns=feature_names)
-        prob = model.predict_proba(features_df)[0][1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            prob = model.predict_proba([features])[0][1]
+        
         score = int(prob * 100)
 
         flags = []
@@ -185,9 +188,11 @@ def analyze_osint_with_ml(url: str, osint_data: OSINTResponse) -> dict:
             "is_obfuscated_js", "trackers_count"
         ]
         features = extract_ml_features(url, osint_data)
-        features_df = pd.DataFrame([features], columns=feature_names)
 
-        prob = model.predict_proba(features_df)[0][1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            prob = model.predict_proba([features])[0][1]
+            
         score = int(prob * 100)
 
         flags = []

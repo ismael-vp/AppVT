@@ -17,6 +17,7 @@ Uso:
 """
 
 import asyncio
+import gc
 import hashlib
 import logging
 import os
@@ -259,11 +260,15 @@ class FeedService:
             logger.warning(f"PhishTank: error parseando JSON: {exc}")
             return
 
-        urls = [
-            entry.get("url", "")
-            for entry in entries
-            if isinstance(entry, dict) and entry.get("url", "").startswith("http")
-        ]
+        urls = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                url = entry.get("url", "")
+                if url.startswith("http"):
+                    urls.append(url)
+                    
+        del entries
+        gc.collect()
 
         if not urls:
             logger.warning("PhishTank: sin URLs válidas en el feed.")
@@ -277,34 +282,43 @@ class FeedService:
         """
         Inserta URLs en la base de datos usando INSERT OR IGNORE para idempotencia.
         Retorna el número de filas realmente insertadas.
+        Se hace en lotes para optimizar el consumo de memoria.
         """
         now = int(time.time())
-        batch: list[tuple] = []
-
-        for url in urls[:MAX_FEED_ENTRIES]:
-            url = url.strip()
-            if not url:
-                continue
-            url_hash = hashlib.sha256(url.encode()).hexdigest()
-            domain = self._extract_domain(url)
-            batch.append((url_hash, url, domain, source, now))
-
-        if not batch:
-            return 0
+        inserted_count = 0
+        chunk_size = 5000
 
         try:
             with sqlite3.connect(self._db_path, timeout=15.0) as conn:
-                before = conn.execute("SELECT COUNT(*) FROM phishing_feeds").fetchone()[0]
-                conn.executemany(
-                    "INSERT OR IGNORE INTO phishing_feeds (url_hash, url, domain, source, added_at) VALUES (?,?,?,?,?)",
-                    batch,
-                )
-                conn.commit()
-                after = conn.execute("SELECT COUNT(*) FROM phishing_feeds").fetchone()[0]
-                return after - before
+                for i in range(0, min(len(urls), MAX_FEED_ENTRIES), chunk_size):
+                    batch = []
+                    for url in urls[i:i + chunk_size]:
+                        url = url.strip()
+                        if not url:
+                            continue
+                        url_hash = hashlib.sha256(url.encode()).hexdigest()
+                        domain = self._extract_domain(url)
+                        batch.append((url_hash, url, domain, source, now))
+
+                    if not batch:
+                        continue
+
+                    before = conn.execute("SELECT COUNT(*) FROM phishing_feeds").fetchone()[0]
+                    conn.executemany(
+                        "INSERT OR IGNORE INTO phishing_feeds (url_hash, url, domain, source, added_at) VALUES (?,?,?,?,?)",
+                        batch,
+                    )
+                    conn.commit()
+                    after = conn.execute("SELECT COUNT(*) FROM phishing_feeds").fetchone()[0]
+                    inserted_count += (after - before)
+                    
+                    del batch
+                    gc.collect()
+
+                return inserted_count
         except Exception as exc:
             logger.error(f"FeedService bulk_insert error: {exc}")
-            return 0
+            return inserted_count
 
     def _count_entries(self) -> int:
         """Cuenta el total de entradas en la base de datos."""

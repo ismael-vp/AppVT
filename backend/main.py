@@ -129,6 +129,14 @@ async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/", tags=["Sistema"])
+async def root():
+    """Endpoint raíz requerido por Hugging Face Spaces."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/docs")
+
 from api.routes import router as analyze_router  # noqa: E402 — import after app init is intentional
 
 app.include_router(analyze_router, prefix="/api")
+
+# Force Factory Rebuild on Hugging Face
