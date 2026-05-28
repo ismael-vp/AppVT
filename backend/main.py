@@ -28,20 +28,28 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Error inicializando caché: {exc}")
         sys.exit(1)
 
-    # ── Inicializar FeedService (feeds locales de phishing) ──────────────────
+    # ── Inicializar FeedService (feeds locales de phishing) sin bloquear ─────
     feed_svc = None
     try:
         from config import settings as _settings
         from services.feed_service import FeedService
         feed_svc = FeedService()
-        await feed_svc.initialize(phishtank_api_key=_settings.PHISHTANK_API_KEY)
-        logger.info(f"✅ FeedService inicializado ({feed_svc.total_entries:,} entradas en BD)")
+        
+        # Lanzar inicialización en background para NO bloquear el arranque de uvicorn
+        # Esto evita el error 503 en Hugging Face Spaces (Timeout de Ingress)
+        import asyncio
+        async def _init_feeds():
+            try:
+                await feed_svc.initialize(phishtank_api_key=_settings.PHISHTANK_API_KEY)
+                logger.info(f"✅ FeedService inicializado ({feed_svc.total_entries:,} entradas en BD)")
+            except Exception as exc:
+                logger.warning(f"⚠️  FeedService no disponible (no crítico): {exc}")
+            finally:
+                feed_svc.start_background_refresh()
+                
+        asyncio.create_task(_init_feeds())
     except Exception as exc:
-        logger.warning(f"⚠️  FeedService no disponible (no crítico): {exc}")
-    finally:
-        # Iniciar refresco background aunque initialize() falle parcialmente
-        if feed_svc is not None:
-            feed_svc.start_background_refresh()
+        logger.warning(f"⚠️  Error preparando FeedService: {exc}")
 
     yield
 
