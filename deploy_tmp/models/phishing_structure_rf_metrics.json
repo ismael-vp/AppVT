@@ -1,0 +1,42 @@
+{
+  "dataset_samples": 1400000,
+  "train_samples": 1120000,
+  "test_samples": 280000,
+  "best_params": {
+    "num_leaves": 127,
+    "n_estimators": 150,
+    "max_depth": 15,
+    "learning_rate": 0.1
+  },
+  "test_accuracy": 0.9921071428571429,
+  "test_f1": 0.9921044358065623,
+  "test_precision": 0.9924448193046661,
+  "test_recall": 0.9917642857142858,
+  "test_auc": 0.9995846026530611,
+  "confusion_matrix_normalized": [
+    [
+      0.99245,
+      0.00755
+    ],
+    [
+      0.008235714285714285,
+      0.9917642857142858
+    ]
+  ],
+  "feature_importances": {
+    "entropy": 3840.0,
+    "path_len": 3452.0,
+    "url_len": 3103.0,
+    "brand_distance": 3026.0,
+    "domain_len": 2878.0,
+    "dots_count": 688.0,
+    "has_numbers": 662.0,
+    "has_keywords": 566.0,
+    "hyphens_count": 250.0,
+    "domain_digit_ratio": 231.0,
+    "suspicious_tld": 171.0,
+    "has_exact_brand": 24.0,
+    "tld_risk_score": 9.0,
+    "has_brand_typo": 0.0
+  }
+}
