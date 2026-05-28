@@ -8,6 +8,9 @@ export interface UrlResult {
   errorMsg?: string;
 }
 
+export const bulkAbortRef = { current: false };
+export const bulkCountdownRef = { current: null as ReturnType<typeof setInterval> | null };
+
 interface BulkState {
   rawText: string;
   results: UrlResult[];
@@ -21,10 +24,6 @@ interface BulkState {
   setStarted: (started: boolean) => void;
   setCountdown: (countdown: number | ((prev: number) => number)) => void;
   reset: () => void;
-  
-  // Para controlar el estado asíncrono incluso si el componente se desmonta
-  abortRef: { current: boolean };
-  countdownRef: { current: ReturnType<typeof setInterval> | null };
 }
 
 export const useBulkStore = create<BulkState>((set) => ({
@@ -33,8 +32,6 @@ export const useBulkStore = create<BulkState>((set) => ({
   running: false,
   started: false,
   countdown: 0,
-  abortRef: { current: false },
-  countdownRef: { current: null },
 
   setRawText: (text) => set({ rawText: text }),
   setResults: (updater) => set((state) => ({

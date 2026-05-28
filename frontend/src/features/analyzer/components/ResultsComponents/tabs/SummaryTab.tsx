@@ -11,26 +11,16 @@ import ThreatDetectionBanner from '@/features/analyzer/components/ResultsCompone
 
 import { ChatMessage } from '@/store/useThreatStore';
 
+import { useAiChat } from '@/hooks/useAiChat';
+
 interface SummaryTabProps {
   scanResult: ScanResult;
-  chatMessages: ChatMessage[];
-  chatInput: string;
-  setChatInput: (val: string) => void;
-  isChatLoading: boolean;
-  handleSendMessage: (e?: React.FormEvent) => void;
-  handleClearChat?: () => void;
-  handleEditMessage?: (index: number) => void;
+  aiChat: ReturnType<typeof useAiChat>;
 }
 
 export default function SummaryTab({
   scanResult,
-  chatMessages,
-  chatInput,
-  setChatInput,
-  isChatLoading,
-  handleSendMessage,
-  handleClearChat,
-  handleEditMessage
+  aiChat
 }: SummaryTabProps) {
   const { ai_summary, osint_data, type } = scanResult;
 
@@ -135,13 +125,7 @@ export default function SummaryTab({
       {/* Chat Contextual Integrado */}
       <div className="print:hidden">
         <AiChatPanel
-          chatMessages={chatMessages}
-          chatInput={chatInput}
-          setChatInput={setChatInput}
-          isChatLoading={isChatLoading}
-          handleSendMessage={handleSendMessage}
-          handleClearChat={handleClearChat}
-          handleEditMessage={handleEditMessage}
+          {...aiChat}
           placeholder="Ej. ¿Qué significa que haya devuelto timeout?"
           emptyStateMessage="Puedes pedirle aclaraciones técnicas sobre el reporte."
         />

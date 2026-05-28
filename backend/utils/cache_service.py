@@ -76,7 +76,10 @@ def _get_db_path(db_path: str | None = None) -> str:
         base_dir = os.path.abspath(DEFAULT_DB_DIR)
     else:
         docker_data_dir = "/app/data"
-        base_dir = docker_data_dir if os.path.isdir(docker_data_dir) else os.getcwd()
+        if os.path.isdir(docker_data_dir):
+            base_dir = docker_data_dir
+        else:
+            base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 
     os.makedirs(base_dir, exist_ok=True)
     return os.path.join(base_dir, filename)

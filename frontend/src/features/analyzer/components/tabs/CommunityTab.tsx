@@ -49,9 +49,7 @@ export default function CommunityTab({ targetResource }: CommunityTabProps) {
 
   // Cargar votos
   const fetchVotes = useCallback(async () => {
-    const headers: Record<string, string> = {};
-    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-    const res = await fetch(`/api/votes?resource=${encodeURIComponent(targetResource)}`, { headers });
+    const res = await fetch(`/api/votes?resource=${encodeURIComponent(targetResource)}`);
     if (res.ok) {
       const data = await res.json();
       setVotes(data);
@@ -64,7 +62,7 @@ export default function CommunityTab({ targetResource }: CommunityTabProps) {
     try {
       const res = await fetch('/api/votes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_resource: targetResource, vote })
       });
       const data = await res.json();
@@ -157,8 +155,7 @@ export default function CommunityTab({ targetResource }: CommunityTabProps) {
       const response = await fetch('/api/comments', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           target_resource: targetResource,
@@ -202,10 +199,7 @@ export default function CommunityTab({ targetResource }: CommunityTabProps) {
       async () => {
         try {
           const response = await fetch(`/api/comments?id=${commentId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
+        method: 'DELETE'
       });
       
       const result = await response.json();
@@ -233,8 +227,7 @@ export default function CommunityTab({ targetResource }: CommunityTabProps) {
       const response = await fetch(`/api/comments`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ id: commentId, content: editContent })
       });

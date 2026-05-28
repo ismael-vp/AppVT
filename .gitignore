@@ -58,6 +58,8 @@ env/
 *.db
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite3
 
 # Datasets & ML Data
 *.csv

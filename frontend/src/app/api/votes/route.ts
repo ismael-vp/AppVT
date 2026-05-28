@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient as createServerClient } from '@/utils/supabase/server';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
@@ -7,14 +7,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
 // POST: emitir o cambiar voto
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
-    const token = authHeader.replace('Bearer ', '');
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } }
-    });
-
+    const supabase = await createServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return NextResponse.json({ error: 'Sesión inválida' }, { status: 401 });
 
@@ -75,7 +68,7 @@ export async function GET(req: NextRequest) {
     const target_resource = url.searchParams.get('resource');
     if (!target_resource) return NextResponse.json({ error: 'Falta el recurso' }, { status: 400 });
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const supabase = await createServerClient();
 
     const { data, error } = await supabase
       .from('url_votes')
@@ -89,17 +82,8 @@ export async function GET(req: NextRequest) {
       throw error;
     }
 
-    // Extraer user_id del token si viene autenticado (opcional)
-    const authHeader = req.headers.get('Authorization');
-    let currentUserId: string | null = null;
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      const authSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: `Bearer ${token}` } }
-      });
-      const { data: { user } } = await authSupabase.auth.getUser();
-      currentUserId = user?.id || null;
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    const currentUserId = user?.id || null;
 
     const safeCount = data.filter(v => v.vote === 'safe').length;
     const phishingCount = data.filter(v => v.vote === 'phishing').length;

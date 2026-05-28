@@ -2,13 +2,24 @@
 
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import axios from 'axios';
+import { useShallow } from 'zustand/react/shallow';
 import { useThreatStore } from '@/store/useThreatStore';
 import { Link, Search, X, Trash2, ScanLine } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 import { useSearchParams } from 'next/navigation';
 
 function AnalyzeFormInner() {
-  const { mode, setMode, setIsScanning, setScanResult, setError, isScanning, scanResult } = useThreatStore();
+  const { mode, setMode, setIsScanning, setScanResult, setError, isScanning, scanResult } = useThreatStore(
+    useShallow((state) => ({
+      mode: state.mode,
+      setMode: state.setMode,
+      setIsScanning: state.setIsScanning,
+      setScanResult: state.setScanResult,
+      setError: state.setError,
+      isScanning: state.isScanning,
+      scanResult: state.scanResult
+    }))
+  );
   const [urlInput, setUrlInput] = useState('');
   const [imageInput, setImageInput] = useState<File | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('Iniciando análisis...');

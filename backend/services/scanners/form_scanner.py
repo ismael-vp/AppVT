@@ -229,9 +229,10 @@ class FormScanner:
 
         html_lower = html_content.lower()
         for pattern in WEBHOOK_PATTERNS:
-            if re.search(pattern, html_lower):
+            plain_pattern = pattern.replace('\\', '').lower()
+            if plain_pattern in html_lower:
                 result.has_dangerous_form = True
-                result.reason = "Canal de exfiltración detectado en código fuente."
+                result.reason = f"Canal de exfiltración detectado en código fuente: {plain_pattern}"
                 return result
 
         iframes = soup.find_all("iframe")

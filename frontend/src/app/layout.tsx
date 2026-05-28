@@ -81,7 +81,20 @@ export default function RootLayout({
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js');
+                  navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                    registration.update();
+                    registration.addEventListener('updatefound', function() {
+                      const newWorker = registration.installing;
+                      if (newWorker) {
+                        newWorker.addEventListener('statechange', function() {
+                          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            console.log("Nueva versión disponible. Refrescando...");
+                            window.location.reload();
+                          }
+                        });
+                      }
+                    });
+                  });
                 });
               }
             `,

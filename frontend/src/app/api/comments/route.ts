@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { User } from '@supabase/supabase-js';
+import { SupabaseClient, User } from '@supabase/supabase-js';
+import { createClient as createServerClient } from '@/utils/supabase/server';
 
 // Usar variable privada de servidor (sin NEXT_PUBLIC_) para la URL interna del backend
 const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -21,14 +21,7 @@ async function authenticateRequest(req: NextRequest): Promise<
   { user: User; supabase: SupabaseClient; error: null } |
   { user: null; supabase: null; error: string }
 > {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return { user: null, supabase: null, error: 'No autorizado' };
-
-  const token = authHeader.replace('Bearer ', '');
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } }
-  });
-
+  const supabase = await createServerClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) return { user: null, supabase: null, error: 'Sesión inválida' };
 

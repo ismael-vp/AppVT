@@ -305,18 +305,18 @@ async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = B
             final_score = max(final_score, 95)
             details = getattr(dns_data_r, "blacklist_details", [])
             detail_str = " | ".join(details) if details else "Spamhaus DBL / SURBL"
-            heuristic_reasons.append(f"🚫 Dominio en lista negra DNS: {detail_str}")
+            heuristic_reasons.append(f"Dominio en lista negra DNS: {detail_str}")
 
         if getattr(osint_data, "feed_detected", False):
             final_score = max(final_score, 100)
             source = getattr(osint_data, "feed_source", "feed local") or "feed local"
-            heuristic_reasons.append(f"🎣 URL en feed de phishing conocido ({source})")
+            heuristic_reasons.append(f"URL en feed de phishing conocido ({source})")
 
         if getattr(osint_data, "safe_browsing_threat", False):
             final_score = max(final_score, 100)
             types = getattr(osint_data, "safe_browsing_types", [])
             types_str = ", ".join(types) if types else "amenaza detectada"
-            heuristic_reasons.append(f"⚠️ Google Safe Browsing: {types_str}")
+            heuristic_reasons.append(f"Google Safe Browsing: {types_str}")
 
         abuse_score = getattr(osint_data, "abuse_confidence_score", None)
         if abuse_score is not None and abuse_score > 0:
@@ -470,8 +470,13 @@ async def chat_endpoint(request: ChatRequest = Body(...)):  # noqa: B008
         if "osint_data" in clean_context and isinstance(clean_context["osint_data"], dict):
             clean_context["osint_data"] = {
                 k: v for k, v in clean_context["osint_data"].items()
-                if k != "html_content"
+                if k not in ("html_content", "redirect_chain", "external_scripts")
             }
+            # Sanitizamos texto libre controlado por el atacante (Ej: Título)
+            if "tech_data" in clean_context["osint_data"]:
+                tech = clean_context["osint_data"]["tech_data"]
+                if tech and "page_title" in tech:
+                    tech["page_title"] = str(tech["page_title"]).replace('"', "'").replace("\n", " ")
 
         if "stats" in clean_context and isinstance(clean_context["stats"], dict):
             if "full_results" in clean_context["stats"]:

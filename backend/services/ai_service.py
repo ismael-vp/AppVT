@@ -78,7 +78,7 @@ def _truncate_text(text: str, max_chars: int, suffix: str = "... [TRUNCADO]") ->
     return text[: max_chars - len(suffix)] + suffix
 
 def _safe_json_dumps(obj: Any, max_chars: int = MAX_CONTEXT_CHARS) -> str:
-    """Serializa a JSON de forma segura y truncando el resultado."""
+    """Serializa a JSON de forma segura y previene corrupción al truncar."""
     def _default_serializer(o):
         if hasattr(o, "isoformat"):
             return o.isoformat()
@@ -86,11 +86,13 @@ def _safe_json_dumps(obj: Any, max_chars: int = MAX_CONTEXT_CHARS) -> str:
 
     try:
         json_str = json.dumps(obj, indent=2, default=_default_serializer, ensure_ascii=False)
+        if len(json_str) > max_chars:
+            logger.warning(f"El contexto OSINT es excesivamente grande ({len(json_str)} bytes). Se omitirán datos para la IA.")
+            return json.dumps({"error": "Contexto demasiado grande, datos omitidos para proteger el límite de tokens."})
+        return json_str
     except (TypeError, ValueError) as exc:
         logger.error(f"Error serializando objeto a JSON: {exc}")
-        json_str = json.dumps({"error": "Datos no serializables"})
-
-    return _truncate_text(json_str, max_chars)
+        return json.dumps({"error": "Datos no serializables"})
 
 def _filter_sensitive_context(context: dict[str, Any]) -> dict[str, Any]:
     """Filtra campos sensibles del contexto."""

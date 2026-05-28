@@ -227,7 +227,7 @@ class OSINTService:
                 f"GSB omitida para {url}: ya detectada en {'feeds' if osint_data.feed_detected else 'DNS blacklist'}"
             )
         # === Machine Learning Integration ===
-        ml_results = analyze_osint_with_ml(url, osint_data)
+        ml_results = await asyncio.to_thread(analyze_osint_with_ml, url, osint_data)
         if ml_results["ml_score"] >= 50 and osint_data.heuristic_result:
             # Combine the ML score with the existing heuristic score
             ml_score = ml_results["ml_score"]

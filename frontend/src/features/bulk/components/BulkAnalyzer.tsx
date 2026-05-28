@@ -2,7 +2,7 @@
 
 import React, { useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useBulkStore, UrlResult } from '@/store/useBulkStore';
+import { useBulkStore, UrlResult, bulkAbortRef, bulkCountdownRef } from '@/store/useBulkStore';
 import { API_URL } from '@/lib/api';
 import {
   Upload, Play, X, CheckCircle2, XCircle, AlertTriangle,
@@ -41,7 +41,6 @@ export default function BulkAnalyzer() {
     running, setRunning,
     started, setStarted,
     countdown, setCountdown,
-    abortRef, countdownRef,
     reset
   } = useBulkStore();
 
@@ -98,10 +97,10 @@ export default function BulkAnalyzer() {
     setResults(prev => prev.map((r, i) =>
       i === index + 1 ? { ...r, status: 'waiting' } : r
     ));
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    countdownRef.current = setInterval(() => {
+    if (bulkCountdownRef.current) clearInterval(bulkCountdownRef.current);
+    bulkCountdownRef.current = setInterval(() => {
       setCountdown(prev => {
-        if (prev <= 1) { clearInterval(countdownRef.current!); return 0; }
+        if (prev <= 1) { clearInterval(bulkCountdownRef.current!); return 0; }
         return prev - 1;
       });
     }, 1000);
@@ -111,20 +110,20 @@ export default function BulkAnalyzer() {
     const urls = parsedUrls;
     if (urls.length === 0) return;
 
-    abortRef.current = false;
+    bulkAbortRef.current = false;
     setStarted(true);
     setRunning(true);
     setCountdown(0);
     setResults(urls.map(url => ({ url, status: 'pending' })));
 
     for (let i = 0; i < urls.length; i++) {
-      if (abortRef.current) break;
+      if (bulkAbortRef.current) break;
 
       // Pausa entre peticiones respetando nuestro propio servidor
       if (i > 0) {
         startCountdown(Math.ceil(SCAN_DELAY_MS / 1000), i - 1);
         await sleep(SCAN_DELAY_MS);
-        if (abortRef.current) break;
+        if (bulkAbortRef.current) break;
         setCountdown(0);
       }
 
@@ -142,21 +141,21 @@ export default function BulkAnalyzer() {
       }));
     }
 
-    if (countdownRef.current) clearInterval(countdownRef.current);
+    if (bulkCountdownRef.current) clearInterval(bulkCountdownRef.current);
     setCountdown(0);
     setRunning(false);
   };
 
   const handleStop = () => {
-    abortRef.current = true;
-    if (countdownRef.current) clearInterval(countdownRef.current);
+    bulkAbortRef.current = true;
+    if (bulkCountdownRef.current) clearInterval(bulkCountdownRef.current);
     setCountdown(0);
     setRunning(false);
   };
 
   const handleReset = () => {
-    abortRef.current = true;
-    if (countdownRef.current) clearInterval(countdownRef.current);
+    bulkAbortRef.current = true;
+    if (bulkCountdownRef.current) clearInterval(bulkCountdownRef.current);
     reset();
   };
 

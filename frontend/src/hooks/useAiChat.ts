@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { useThreatStore, ChatMessage } from '@/store/useThreatStore';
 import { ScanResult } from '@/types';
@@ -13,9 +13,14 @@ export function useAiChat(scanResult: ScanResult) {
   const chatId = scanResult?.resourceName || 'default';
   const chatMessages = chats[chatId] || [];
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!chatInput.trim() || isChatLoading || isSubmittingRef.current) return;
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
 
     isSubmittingRef.current = true;
 
@@ -33,7 +38,7 @@ export function useAiChat(scanResult: ScanResult) {
       const response = await axios.post(`${API_URL}/api/chat`, {
         messages: messagesToSend,
         scan_context: scanResult
-      });
+      }, { signal: abortControllerRef.current.signal });
 
       // Fix 9: leer estado fresco del store en el callback, no el closure de updatedMessages
       const freshMessages = useThreatStore.getState().chats[chatId] || [];
@@ -42,7 +47,8 @@ export function useAiChat(scanResult: ScanResult) {
       } else {
         saveChat(chatId, [...freshMessages, { role: 'assistant', content: 'Lo siento, ocurrió un error procesando tu solicitud.' }]);
       }
-    } catch {
+    } catch (error) {
+      if (axios.isCancel(error)) return;
       const freshMessages = useThreatStore.getState().chats[chatId] || [];
       saveChat(chatId, [...freshMessages, { role: 'assistant', content: 'Error de conexión con el servidor IA.' }]);
     } finally {
@@ -50,6 +56,12 @@ export function useAiChat(scanResult: ScanResult) {
       isSubmittingRef.current = false;
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
+  }, []);
 
   const handleClearChat = () => {
     clearChat(chatId);

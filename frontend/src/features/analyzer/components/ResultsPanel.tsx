@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useThreatStore } from '@/store/useThreatStore';
 import { useToastStore } from '@/store/useToast';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
@@ -12,11 +13,18 @@ import ScriptModal from './ResultsComponents/ui/ScriptModal';
 import { useAiChat } from '@/hooks/useAiChat';
 import { useScriptAnalyzer } from '@/hooks/useScriptAnalyzer';
 import ImagePhishingPanel from './ResultsComponents/tabs/ImagePhishingPanel';
+import { Button } from '@/components/ui/button';
 
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
-  const { scanResult, error, resetState } = useThreatStore();
+  const { scanResult, error, resetState } = useThreatStore(
+    useShallow((state) => ({
+      scanResult: state.scanResult,
+      error: state.error,
+      resetState: state.resetState,
+    }))
+  );
   const [activeTab, setActiveTab] = useState<'ai' | 'technical' | 'community'>('ai');
 
   // Bug #3 fix: useAiChat siempre se llama (regla de hooks), pero nunca con null —
@@ -42,7 +50,9 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
     return (
       <div className="w-full">
         <div className="flex justify-end mb-2 w-full max-w-5xl mx-auto">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => {
               if (isReadOnly) {
                 window.location.href = '/';
@@ -51,11 +61,10 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }
             }}
-            className="flex items-center space-x-2 bg-[#050505] text-[#888] border border-[#333] hover:text-white hover:bg-[#111] transition-colors text-xs font-medium py-1.5 px-3 rounded-md"
           >
             <RotateCcw size={14} />
             <span>Nuevo Análisis</span>
-          </button>
+          </Button>
         </div>
         {scanResult.image_analysis ? (
           <ImagePhishingPanel
@@ -78,7 +87,9 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
 
       <div className="flex justify-end mb-3 gap-2">
         {!isReadOnly && (
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={async () => {
               try {
                 const id = await useThreatStore.getState().shareCurrentReport();
@@ -91,13 +102,14 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
                 useToastStore.getState().showToast(err instanceof Error ? err.message : 'Error al compartir enlace', 'error');
               }
             }}
-            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-200 border border-zinc-800/60 hover:border-zinc-700 bg-[#0d0d0d] transition-colors text-xs font-medium py-1.5 px-3 rounded-lg"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             Compartir
-          </button>
+          </Button>
         )}
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => {
             if (isReadOnly) {
               window.location.href = '/';
@@ -106,11 +118,10 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }
           }}
-          className="flex items-center gap-2 text-zinc-500 hover:text-zinc-200 border border-zinc-800/60 hover:border-zinc-700 bg-[#0d0d0d] transition-colors text-xs font-medium py-1.5 px-3 rounded-lg"
         >
           <RotateCcw size={13} />
           Nuevo análisis
-        </button>
+        </Button>
       </div>
 
       <div className="bg-[#0d0d0d] border border-zinc-800/50 rounded-xl overflow-hidden w-full">
@@ -139,13 +150,7 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
             <SummaryTab
               key={scanResult.resourceName}
               scanResult={scanResult}
-              chatMessages={aiChat.chatMessages}
-              chatInput={aiChat.chatInput}
-              setChatInput={aiChat.setChatInput}
-              isChatLoading={aiChat.isChatLoading}
-              handleSendMessage={aiChat.handleSendMessage}
-              handleClearChat={aiChat.handleClearChat}
-              handleEditMessage={aiChat.handleEditMessage}
+              aiChat={aiChat}
             />
           ) : activeTab === 'technical' ? (
             <TechnicalTab

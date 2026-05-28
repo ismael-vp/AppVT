@@ -1,13 +1,21 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useThreatStore } from '@/store/useThreatStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Clock, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 
 export default function HistoryPanel() {
-  const { history, clearHistory, setScanResult, setMode } = useThreatStore();
-  const { session } = useAuthStore();
+  const { history, clearHistory, setScanResult, setMode } = useThreatStore(
+    useShallow((state) => ({
+      history: state.history,
+      clearHistory: state.clearHistory,
+      setScanResult: state.setScanResult,
+      setMode: state.setMode,
+    }))
+  );
+  const { session } = useAuthStore(useShallow((state) => ({ session: state.session })));
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
