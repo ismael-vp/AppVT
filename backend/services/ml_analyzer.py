@@ -2,10 +2,9 @@ import logging
 import math
 import os
 import re
+import warnings
 from collections import Counter
 from datetime import datetime, timezone
-
-import warnings
 
 import joblib
 
@@ -126,18 +125,12 @@ def extract_ml_features(url: str, osint_data: OSINTResponse | None = None) -> li
     return extract_structure_features(url) + extract_osint_features_from_response(url, osint_data)
 
 def analyze_structure_with_ml(url: str) -> dict:
-    """Inferencia súper rápida usando solo la estructura de la URL."""
+    """Inferencia rápida usando solo la estructura de la URL."""
     model = load_structure_model()
     if not model:
         return {"ml_score": 0, "flags": []}
 
     try:
-        feature_names = [
-            "url_len", "domain_len", "path_len", "dots_count", "hyphens_count",
-            "has_numbers", "entropy", "has_keywords", "suspicious_tld",
-            "domain_digit_ratio", "tld_risk_score", "brand_distance", "has_brand_typo",
-            "has_exact_brand"
-        ]
         features = extract_advanced_features(url)
         if not features:
             return {"ml_score": 0, "flags": []}
@@ -145,7 +138,7 @@ def analyze_structure_with_ml(url: str) -> dict:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             prob = model.predict_proba([features])[0][1]
-        
+
         score = int(prob * 100)
 
         flags = []
@@ -166,11 +159,9 @@ def analyze_osint_with_ml(url: str, osint_data: OSINTResponse) -> dict:
         return {"ml_score": 0, "flags": []}
 
     # ── Guardia de calidad de datos ──────────────────────────────────────────
-    # Si tanto SSL como WHOIS son None, significa que ambos scanners fallaron
-    # por timeout de red (común en entornos restringidos como Hugging Face Free).
-    # En ese caso el modelo recibiría el perfil idéntico de un sitio de phishing
-    # nuevo (age=0, ssl=None, self_signed=1) aunque sea un sitio legítimo.
-    # NO ejecutar el modelo cuando los datos clave son insuficientes.
+    # Si tanto SSL como WHOIS son None, los scanners fallaron por timeout.
+    # El modelo recibiría el mismo perfil que un phishing nuevo (age=0, ssl=None)
+    # aunque sea un sitio legítimo. Omitir para evitar falsos positivos.
     ssl_available = osint_data and osint_data.ssl is not None
     whois_available = osint_data and osint_data.whois is not None
     if not ssl_available and not whois_available:
@@ -181,18 +172,12 @@ def analyze_osint_with_ml(url: str, osint_data: OSINTResponse) -> dict:
         return {"ml_score": 0, "flags": []}
 
     try:
-        feature_names = [
-            "url_len", "domain_len", "path_len", "dots_count", "hyphens_count",
-            "has_numbers", "entropy", "has_keywords", "suspicious_tld",
-            "whois_domain_age", "ssl_days_expiry", "ssl_is_self_signed",
-            "is_obfuscated_js", "trackers_count"
-        ]
         features = extract_ml_features(url, osint_data)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             prob = model.predict_proba([features])[0][1]
-            
+
         score = int(prob * 100)
 
         flags = []

@@ -2,6 +2,7 @@ import asyncio
 import ipaddress
 import logging
 import os
+from urllib.parse import quote
 
 import httpx
 
@@ -114,7 +115,6 @@ class GeoScanner:
         client = GeoScanner._get_client()
 
         try:
-            from urllib.parse import quote
             safe_ip = quote(validated_ip, safe="")
             url = f"http://ip-api.com/json/{safe_ip}"
 

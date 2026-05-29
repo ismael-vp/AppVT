@@ -3,7 +3,6 @@ Servicio de Feeds Locales de Phishing.
 
 Descarga y mantiene en SQLite local los feeds de:
   - OpenPhish (feed.txt): actualización cada ~6h, totalmente libre.
-  - PhishTank (online-valid.json): 10k+ URLs verificadas manualmente (API key opcional).
 
 Las consultas son O(1) por hash de URL — latencia ~0ms.
 El refresco de feeds se ejecuta en background cada hora usando asyncio.
@@ -13,11 +12,10 @@ Uso:
     await service.initialize()           # Descarga inicial
     result = await service.check_url("https://evil.com/phish")
     if result.detected:
-        print(result.source)            # "OpenPhish" | "PhishTank"
+        print(result.source)            # "OpenPhish"
 """
 
 import asyncio
-import gc
 import hashlib
 import logging
 import os
@@ -39,8 +37,6 @@ FEED_DOWNLOAD_TIMEOUT = float(os.getenv("FEED_DOWNLOAD_TIMEOUT", "30.0"))
 MAX_FEED_ENTRIES = int(os.getenv("MAX_FEED_ENTRIES", "500_000"))
 
 OPENPHISH_FEED_URL = "https://openphish.com/feed.txt"
-PHISHTANK_FEED_URL = "https://data.phishtank.com/data/{api_key}/online-valid.json"
-PHISHTANK_FEED_URL_ANON = "https://data.phishtank.com/data/online-valid.json"
 
 # ─── Modelos de datos ──────────────────────────────────────────────────────────
 
@@ -110,12 +106,11 @@ class FeedService:
 
     # ─── API Pública ────────────────────────────────────────────────────────────
 
-    async def initialize(self, phishtank_api_key: str | None = None) -> None:
+    async def initialize(self) -> None:
         """
         Descarga inicial de todos los feeds.
         Debe llamarse una vez al arrancar la aplicación.
         """
-        self._phishtank_api_key = phishtank_api_key
         logger.info("📥 FeedService: descargando feeds de phishing iniciales...")
         await self._refresh_all_feeds()
 
@@ -151,7 +146,7 @@ class FeedService:
         domain = self._extract_domain(url)
 
         try:
-            result = await asyncio.to_thread(self._query_db, url_hash, domain)
+            result = await asyncio.to_thread(self._query_db, url_hash, domain, url)
             return result
         except Exception as exc:
             logger.error(f"FeedService error comprobando {url}: {exc}")
@@ -164,7 +159,7 @@ class FeedService:
 
     # ─── Internos ───────────────────────────────────────────────────────────────
 
-    def _query_db(self, url_hash: str, domain: str) -> FeedCheckResult:
+    def _query_db(self, url_hash: str, domain: str, search_url: str) -> FeedCheckResult:
         """Consulta sincrónica a la base de datos (ejecutada en thread pool)."""
         with sqlite3.connect(self._db_path, timeout=5.0) as conn:
             # 1. Búsqueda por hash exacto
@@ -174,6 +169,18 @@ class FeedService:
             ).fetchone()
             if row:
                 return FeedCheckResult(detected=True, source=row[0], url_hash=url_hash)
+
+            # 2. Búsqueda por dominio y coincidencia flexible (OpenPhish)
+            rows = conn.execute(
+                "SELECT url, source FROM phishing_feeds WHERE domain = ?",
+                (domain,)
+            ).fetchall()
+            
+            search_norm = search_url.rstrip('/').replace("https://", "http://").lower()
+            for db_url, source in rows:
+                db_norm = db_url.rstrip('/').replace("https://", "http://").lower()
+                if search_norm == db_norm:
+                    return FeedCheckResult(detected=True, source=source, url_hash=None)
 
         return FeedCheckResult()
 
@@ -193,7 +200,6 @@ class FeedService:
         """Descarga y actualiza todos los feeds configurados."""
         tasks = [
             self._refresh_openphish(),
-            self._refresh_phishtank(),
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for i, r in enumerate(results):
@@ -226,57 +232,7 @@ class FeedService:
         self._last_refresh[source] = time.time()
         logger.info(f"✅ OpenPhish: {inserted} nuevas entradas insertadas ({len(urls)} procesadas).")
 
-    async def _refresh_phishtank(self) -> None:
-        """Descarga el feed de PhishTank en formato JSON."""
-        source = "PhishTank"
-        api_key = getattr(self, "_phishtank_api_key", None)
-        feed_url = (
-            PHISHTANK_FEED_URL.format(api_key=api_key)
-            if api_key
-            else PHISHTANK_FEED_URL_ANON
-        )
 
-        logger.info(f"📥 Descargando {source}{'(autenticado)' if api_key else '(anónimo)'}...")
-
-        try:
-            async with httpx.AsyncClient(timeout=FEED_DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
-                response = await client.get(feed_url, headers={
-                    "User-Agent": "phishtank/PhishingScanner"
-                })
-                if response.status_code == 429:
-                    logger.warning("PhishTank: rate-limit alcanzado. Omitiendo hasta próximo refresco.")
-                    return
-                response.raise_for_status()
-        except httpx.HTTPError as exc:
-            logger.warning(f"PhishTank descarga fallida: {exc}")
-            return
-
-        try:
-            entries = response.json()
-            if not isinstance(entries, list):
-                logger.warning("PhishTank: formato JSON inesperado.")
-                return
-        except Exception as exc:
-            logger.warning(f"PhishTank: error parseando JSON: {exc}")
-            return
-
-        urls = []
-        for entry in entries:
-            if isinstance(entry, dict):
-                url = entry.get("url", "")
-                if url.startswith("http"):
-                    urls.append(url)
-                    
-        del entries
-        gc.collect()
-
-        if not urls:
-            logger.warning("PhishTank: sin URLs válidas en el feed.")
-            return
-
-        inserted = await asyncio.to_thread(self._bulk_insert, urls, source)
-        self._last_refresh[source] = time.time()
-        logger.info(f"✅ PhishTank: {inserted} nuevas entradas insertadas ({len(urls)} procesadas).")
 
     def _bulk_insert(self, urls: list[str], source: str) -> int:
         """
@@ -303,17 +259,13 @@ class FeedService:
                     if not batch:
                         continue
 
-                    before = conn.execute("SELECT COUNT(*) FROM phishing_feeds").fetchone()[0]
-                    conn.executemany(
+                    cursor = conn.executemany(
                         "INSERT OR IGNORE INTO phishing_feeds (url_hash, url, domain, source, added_at) VALUES (?,?,?,?,?)",
                         batch,
                     )
                     conn.commit()
-                    after = conn.execute("SELECT COUNT(*) FROM phishing_feeds").fetchone()[0]
-                    inserted_count += (after - before)
-                    
-                    del batch
-                    gc.collect()
+                    # executemany.rowcount es el número real de filas insertadas
+                    inserted_count += cursor.rowcount
 
                 return inserted_count
         except Exception as exc:

@@ -1,13 +1,14 @@
+import asyncio
 import json
 import logging
 import os
-import re
 from typing import Any
 
 from fastapi import HTTPException
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
+from services.security import PROMPT_INJECTION_PATTERNS, sanitize_untrusted_text
 from utils.openai_client import get_openai_client
 
 logger = logging.getLogger(__name__)
@@ -30,46 +31,20 @@ _base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").lower()
 _SUPPORTS_JSON_MODE = "openai.com" in _base_url
 _JSON_RESPONSE_FORMAT: dict = {"type": "json_object"} if _SUPPORTS_JSON_MODE else {}
 
-PROMPT_INJECTION_PATTERNS = [
-    re.compile(r"ignore\s+(all\s+)?(previous\s+)?instructions?", re.I),
-    re.compile(r"ignore\s+(the\s+)?system\s+prompt", re.I),
-    re.compile(r"you\s+are\s+now\s+a", re.I),
-    re.compile(r"from\s+now\s+on\s+you\s+are", re.I),
-    re.compile(r"disregard\s+(all\s+)?(previous\s+)?(instructions?|rules?)", re.I),
-    re.compile(r"forget\s+(all\s+)?(previous\s+)?(instructions?|context)", re.I),
-    re.compile(r"new\s+instruction[s]?:", re.I),
-    re.compile(r"system\s*:\s*", re.I),
-    re.compile(r"user\s*:\s*", re.I),
-    re.compile(r"assistant\s*:\s*", re.I),
-    re.compile(r"<\/\s*(system|user|assistant)\s*>", re.I),
-    re.compile(r"\[\s*(system|user|assistant)\s*\]", re.I),
-    re.compile(r"DAN\s*\(|Do\s+Anything\s+Now", re.I),
-    re.compile(r"jailbreak", re.I),
-    re.compile(r"developer\s+mode", re.I),
-]
-
 SENSITIVE_CONTEXT_FIELDS = {
     "html_content", "raw_html", "screenshot_desktop", "screenshot_mobile",
     "full_response", "raw_data", "api_response", "cookies", "headers_raw",
     "internal_notes", "debug_info", "stack_trace",
 }
+# Pre-compute lowercase version once to avoid O(n) comprehensions on every request
+_SENSITIVE_CONTEXT_FIELDS_LOWER = {f.lower() for f in SENSITIVE_CONTEXT_FIELDS}
+
 
 class AnalysisResponse(BaseModel):
     """Schema esperado de la respuesta JSON de generate_analysis_explanation."""
     summary: str = Field(..., min_length=10, max_length=500)
     action_steps: list[str] = Field(default_factory=list, max_length=5)
 
-def _sanitize_untrusted_text(text: str) -> str:
-    """Sanitiza texto no confiable antes de incluirlo en un prompt."""
-    if not isinstance(text, str):
-        text = str(text)
-
-    for pattern in PROMPT_INJECTION_PATTERNS:
-        text = pattern.sub("[CONTENIDO_FILTRADO]", text)
-
-    text = text.replace("<untrusted_text>", "&lt;untrusted_text&gt;")
-    text = text.replace("</untrusted_text>", "&lt;/untrusted_text&gt;")
-    return text
 
 def _truncate_text(text: str, max_chars: int, suffix: str = "... [TRUNCADO]") -> str:
     """Trunca un texto a max_chars."""
@@ -101,7 +76,7 @@ def _filter_sensitive_context(context: dict[str, Any]) -> dict[str, Any]:
 
     filtered = {}
     for key, value in context.items():
-        if key.lower() in {f.lower() for f in SENSITIVE_CONTEXT_FIELDS}:
+        if key.lower() in _SENSITIVE_CONTEXT_FIELDS_LOWER:
             continue
 
         if isinstance(value, str) and len(value) > 2000:
@@ -109,7 +84,7 @@ def _filter_sensitive_context(context: dict[str, Any]) -> dict[str, Any]:
         elif isinstance(value, dict):
             nested = {}
             for k2, v2 in value.items():
-                if k2.lower() in {f.lower() for f in SENSITIVE_CONTEXT_FIELDS}:
+                if k2.lower() in _SENSITIVE_CONTEXT_FIELDS_LOWER:
                     continue
                 if isinstance(v2, str) and len(v2) > 2000:
                     nested[k2] = _truncate_text(v2, 2000)
@@ -156,16 +131,15 @@ def _validate_chat_messages(messages: list[dict[str, str]]) -> list[dict[str, st
 
     return validated
 
-async def _api_call_with_retry(callable, max_retries: int = MAX_RETRIES):
-    """Ejecuta una llamada a la API de IA con retry."""
-    import asyncio
+async def _api_call_with_retry(api_call, max_retries: int = MAX_RETRIES):
+    """Ejecuta una llamada a la API de IA con retry exponencial ante rate-limits o errores de red."""
     last_exception = None
 
     for attempt in range(max_retries + 1):
         try:
-            return await callable()
+            return await api_call()
         except HTTPException:
-            # Bug #5 fix: las HTTPException propias no deben entrar al retry
+            # Las HTTPException propias no deben entrar al retry
             raise
         except Exception as exc:
             last_exception = exc
@@ -225,7 +199,7 @@ class AIService:
                 detail="Servicio de IA no disponible."
             )
 
-        resource_type = _sanitize_untrusted_text(str(resource_type))[:50]
+        resource_type = sanitize_untrusted_text(str(resource_type))[:50]
 
         # Filtramos contenido enorme como html_content para no saturar el prompt
         safe_osint = {}
@@ -384,7 +358,7 @@ class AIService:
                 detail="Servicio de IA no disponible."
             )
 
-        script_url = _sanitize_untrusted_text(str(script_url))[:500]
+        script_url = sanitize_untrusted_text(str(script_url))[:500]
 
         system_prompt = (
             "Eres un experto en ciberseguridad. Te darán la URL de un script o rastreador web. "
@@ -441,7 +415,7 @@ class AIService:
                 detail="Servicio de IA no disponible."
             )
 
-        content = _sanitize_untrusted_text(str(content))[:1000]
+        content = sanitize_untrusted_text(str(content))[:1000]
 
         system_prompt = (
             "Eres el moderador de una plataforma de ciberseguridad. "

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
-import { X, Search, ShieldAlert, ShieldCheck, Clock, Trash2 } from 'lucide-react';
+import { X, Search, ShieldAlert, ShieldCheck, Clock, Trash2, Database } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useThreatStore } from '../../store/useThreatStore';
 import { useToastStore } from '@/store/useToast';
@@ -41,6 +41,9 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
   const [mounted, setMounted] = useState(false);
   const [reports, setReports] = useState<ScanReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isClearingCache, setIsClearingCache] = useState(false);
+  const [showAdminPrompt, setShowAdminPrompt] = useState(false);
+  const [adminKeyInput, setAdminKeyInput] = useState('');
   const { session } = useAuthStore();
   const { showToast, showConfirm } = useToastStore();
   const router = useRouter();
@@ -147,6 +150,29 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
     );
   };
 
+  const handleClearCache = async () => {
+    if (!adminKeyInput) return;
+    setIsClearingCache(true);
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${API_URL}/api/admin/clear-cache`, {
+        method: 'POST',
+        headers: { 'X-Admin-Key': adminKeyInput }
+      });
+      if (res.ok) {
+        showToast('Caché limpiada correctamente', 'success');
+        setShowAdminPrompt(false);
+        setAdminKeyInput('');
+      } else {
+        showToast('Error o clave incorrecta', 'error');
+      }
+    } catch (e) {
+      showToast('Error de conexión con el servidor', 'error');
+    } finally {
+      setIsClearingCache(false);
+    }
+  };
+
   if (!mounted) return null;
 
   return createPortal(
@@ -169,6 +195,18 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800/50">
           <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Recientes</span>
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => {
+                setAdminKeyInput('');
+                setShowAdminPrompt(true);
+              }}
+              className={`text-zinc-600 hover:text-orange-400 transition-colors p-1.5 rounded-md hover:bg-orange-500/5 ${isClearingCache ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title="Limpiar caché del servidor"
+              disabled={isClearingCache}
+              tabIndex={isOpen ? 0 : -1}
+            >
+              <Database size={14} />
+            </button>
             {reports.length > 0 && (
               <button
                 onClick={handleClearAll}
@@ -191,8 +229,43 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
         </div>
 
         {/* Contenido */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-          {!session ? (
+        <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 relative">
+          {showAdminPrompt ? (
+            <div className="absolute inset-0 z-10 bg-[#0a0a0a] flex flex-col items-center justify-center p-6">
+              <Database size={32} className="text-zinc-500 mb-4" />
+              <h3 className="text-sm font-medium text-white mb-2">Limpiar Caché</h3>
+              <p className="text-xs text-zinc-400 text-center mb-6">
+                Introduce la clave de administración para borrar la caché del servidor.
+              </p>
+              <input
+                type="password"
+                value={adminKeyInput}
+                onChange={(e) => setAdminKeyInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleClearCache();
+                  if (e.key === 'Escape') setShowAdminPrompt(false);
+                }}
+                className="w-full bg-[#141414] border border-zinc-800 text-sm text-white px-3 py-2 rounded-md focus:outline-none focus:border-zinc-500 mb-4"
+                placeholder="Clave de administración"
+                autoFocus
+              />
+              <div className="flex w-full gap-2">
+                <button
+                  onClick={() => setShowAdminPrompt(false)}
+                  className="flex-1 py-2 text-xs font-medium text-zinc-400 bg-zinc-900 rounded-md hover:bg-zinc-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleClearCache}
+                  disabled={isClearingCache || !adminKeyInput}
+                  className="flex-1 py-2 text-xs font-medium text-white bg-orange-600/80 rounded-md hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                >
+                  {isClearingCache ? 'Limpiando...' : 'Confirmar'}
+                </button>
+              </div>
+            </div>
+          ) : !session ? (
             <div className="text-center text-zinc-500 mt-10">
               Debes iniciar sesión para ver tu historial.
             </div>

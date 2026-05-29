@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import sys
@@ -6,7 +7,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 load_dotenv()
 from config import settings  # noqa: E402
@@ -31,22 +32,20 @@ async def lifespan(app: FastAPI):
     # ── Inicializar FeedService (feeds locales de phishing) sin bloquear ─────
     feed_svc = None
     try:
-        from config import settings as _settings
         from services.feed_service import FeedService
         feed_svc = FeedService()
-        
+
         # Lanzar inicialización en background para NO bloquear el arranque de uvicorn
         # Esto evita el error 503 en Hugging Face Spaces (Timeout de Ingress)
-        import asyncio
         async def _init_feeds():
             try:
-                await feed_svc.initialize(phishtank_api_key=_settings.PHISHTANK_API_KEY)
+                await feed_svc.initialize()
                 logger.info(f"✅ FeedService inicializado ({feed_svc.total_entries:,} entradas en BD)")
             except Exception as exc:
                 logger.warning(f"⚠️  FeedService no disponible (no crítico): {exc}")
             finally:
                 feed_svc.start_background_refresh()
-                
+
         asyncio.create_task(_init_feeds())
     except Exception as exc:
         logger.warning(f"⚠️  Error preparando FeedService: {exc}")
@@ -107,10 +106,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/api/app-info", tags=["Sistema"])
 async def system_info():
     """Información básica del sistema — usada por el frontend para mostrar el estado."""
+    # CacheService es un singleton; instanciarlo aquí sólo valida que sigue accesible.
     all_ok = True
     try:
         from utils.cache_service import CacheService
-        CacheService()
+        CacheService()  # ping implícito al singleton
     except Exception:
         all_ok = False
 
@@ -132,11 +132,9 @@ async def health_check():
 @app.get("/", tags=["Sistema"])
 async def root():
     """Endpoint raíz requerido por Hugging Face Spaces."""
-    from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/docs")
+
 
 from api.routes import router as analyze_router  # noqa: E402 — import after app init is intentional
 
 app.include_router(analyze_router, prefix="/api")
-
-# Force Factory Rebuild on Hugging Face

@@ -4,9 +4,11 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import axios from 'axios';
 import { useShallow } from 'zustand/react/shallow';
 import { useThreatStore } from '@/store/useThreatStore';
-import { Link, Search, X, Trash2, ScanLine } from 'lucide-react';
+import { Search, X, Trash2, ScanLine } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 import { useSearchParams } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import { useImageUpload } from '@/hooks/useImageUpload';
 
 function AnalyzeFormInner() {
   const { mode, setMode, setIsScanning, setScanResult, setError, isScanning, scanResult } = useThreatStore(
@@ -20,32 +22,15 @@ function AnalyzeFormInner() {
       scanResult: state.scanResult
     }))
   );
+  
   const [urlInput, setUrlInput] = useState('');
-  const [imageInput, setImageInput] = useState<File | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('Iniciando análisis...');
   const searchParams = useSearchParams();
   const urlParam = searchParams.get('url');
 
-  // 1. NUEVO ESTADO: Para guardar la URL segura de la imagen
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const { imageInput, previewUrl, handleImageSelection, setImageInput } = useImageUpload();
   const abortControllerRef = useRef<AbortController | null>(null);
   const [hasAutoScanned, setHasAutoScanned] = useState(false);
-
-  // --- EFECTO: Gestor de Memoria para la previsualización de imágenes (Fix Blob Leak) ---
-  useEffect(() => {
-    if (!imageInput) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPreviewUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(imageInput);
-    setPreviewUrl(objectUrl);
-
-    return () => {
-      URL.revokeObjectURL(objectUrl);
-    };
-  }, [imageInput]);
 
   // --- EFECTO: Sincronización del input con el historial ---
   useEffect(() => {
@@ -106,58 +91,6 @@ function AnalyzeFormInner() {
     return () => clearInterval(interval);
   }, [isScanning, mode]);
 
-  const handleImageSelection = (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    img.src = objectUrl;
-
-    img.onload = () => {
-      // Revocar inmediatamente tras cargar — el useEffect crear\u00e1 su propio objectUrl para el preview
-      URL.revokeObjectURL(objectUrl);
-
-      const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 1200;
-      const MAX_HEIGHT = 1200;
-      let width = img.width;
-      let height = img.height;
-
-      if (width > height) {
-        if (width > MAX_WIDTH) {
-          height = Math.round((height *= MAX_WIDTH / width));
-          width = MAX_WIDTH;
-        }
-      } else {
-        if (height > MAX_HEIGHT) {
-          width = Math.round((width *= MAX_HEIGHT / height));
-          height = MAX_HEIGHT;
-        }
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0, width, height);
-
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const compressedFile = new File([blob], file.name, {
-            type: 'image/jpeg',
-            lastModified: Date.now(),
-          });
-          setImageInput(compressedFile);
-        } else {
-          setImageInput(file);
-        }
-      }, 'image/jpeg', 0.85);
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      setImageInput(file);
-    };
-  };
-
   // --- EFECTO: Escuchar evento Paste Global ---
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
@@ -174,7 +107,7 @@ function AnalyzeFormInner() {
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [mode, isScanning]);
+  }, [mode, isScanning, handleImageSelection]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -262,31 +195,27 @@ function AnalyzeFormInner() {
         <button
           type="button"
           onClick={() => setMode('url')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            mode === 'url'
-              ? 'bg-white text-black'
-              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-          }`}
+          className={cn(
+            "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            mode === 'url' ? "bg-white text-black" : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          )}
         >
-          <Link size={14} />
           URL
         </button>
         <button
           type="button"
           onClick={() => setMode('image')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            mode === 'image'
-              ? 'bg-white text-black'
-              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-          }`}
+          className={cn(
+            "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            mode === 'image' ? "bg-white text-black" : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+          )}
         >
-          <ScanLine size={14} />
           Imagen
         </button>
       </div>
 
       {/* Form card */}
-      <div className="bg-[#0d0d0d] border border-zinc-800/50 rounded-xl p-5">
+      <div className="bg-[#050505] border border-zinc-800/50 rounded-xl p-5">
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === 'url' ? (
             <div className="relative">
@@ -304,7 +233,10 @@ function AnalyzeFormInner() {
               <button
                 type="button"
                 onClick={() => setUrlInput('')}
-                className={`absolute inset-y-0 right-0 pr-3.5 flex items-center text-zinc-600 hover:text-zinc-300 transition-colors ${urlInput && !isScanning ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                className={cn(
+                  "absolute inset-y-0 right-0 pr-3.5 flex items-center text-zinc-600 hover:text-zinc-300 transition-colors",
+                  urlInput && !isScanning ? "opacity-100" : "opacity-0 pointer-events-none"
+                )}
               >
                 <X size={15} />
               </button>
@@ -330,7 +262,7 @@ function AnalyzeFormInner() {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-2 text-zinc-600">
-                    <ScanLine size={22} />
+                    <ScanLine size={18} />
                     <p className="text-xs">Arrastra o haz clic — JPG, PNG, WEBP</p>
                   </div>
                 )}
@@ -345,13 +277,14 @@ function AnalyzeFormInner() {
           <button
             type="submit"
             disabled={isScanning || (mode === 'url' ? !urlInput : !imageInput)}
-            className={`w-full flex items-center justify-center gap-3 font-medium py-3 rounded-lg text-sm transition-all ${
+            className={cn(
+              "w-full flex items-center justify-center gap-3 font-medium py-3 rounded-lg text-sm transition-all",
               isScanning
-                ? 'bg-zinc-900 text-zinc-500 cursor-wait'
+                ? "bg-zinc-900 text-zinc-500 cursor-wait"
                 : (mode === 'url' ? !urlInput : !imageInput)
-                ? 'bg-zinc-900/60 text-zinc-600 cursor-not-allowed'
-                : 'bg-white text-black hover:bg-zinc-100 active:scale-[0.99]'
-            }`}
+                ? "bg-zinc-900/60 text-zinc-600 cursor-not-allowed"
+                : "bg-white text-black hover:bg-zinc-100 active:scale-[0.99]"
+            )}
           >
             {isScanning ? (
               <>
@@ -374,7 +307,7 @@ function AnalyzeFormInner() {
 
 export default function AnalyzeForm() {
   return (
-    <Suspense fallback={<div className="w-full max-w-5xl mx-auto bg-[#0d0d0d] border border-zinc-800/50 p-5 rounded-xl" />}>
+    <Suspense fallback={<div className="w-full max-w-5xl mx-auto bg-[#050505] border border-zinc-800/50 p-5 rounded-xl" />}>
       <AnalyzeFormInner />
     </Suspense>
   );

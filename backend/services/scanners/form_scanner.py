@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import re
@@ -33,7 +34,6 @@ def _get_webhook_patterns() -> list:
     env_patterns = os.getenv("WEBHOOK_PATTERNS", "").strip()
     if env_patterns:
         try:
-            import json
             patterns = json.loads(env_patterns)
             if isinstance(patterns, list) and all(isinstance(p, str) for p in patterns):
                 return patterns

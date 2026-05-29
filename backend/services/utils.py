@@ -9,7 +9,7 @@ import os
 import socket
 from collections import Counter
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import filetype
 import httpx
@@ -413,7 +413,6 @@ async def resolve_redirect_chain(url: str, timeout: float = 8.0, max_redirects: 
                     location = resp_headers.get("location")
                     if not location:
                         break
-                    from urllib.parse import urljoin
                     next_url = urljoin(current_url, location)
                     if not await is_safe_url_async(next_url):
                         break

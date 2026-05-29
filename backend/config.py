@@ -33,7 +33,6 @@ class Settings(BaseSettings):
     # Secretos Opcionales
     ABUSEIPDB_API_KEY: str | None = None
     GOOGLE_SAFE_BROWSING_API_KEY: str | None = None  # Gratis: 10k req/día — console.cloud.google.com
-    PHISHTANK_API_KEY: str | None = None              # Opcional — evita rate-limit en PhishTank
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(BASE_DIR, ".env"),

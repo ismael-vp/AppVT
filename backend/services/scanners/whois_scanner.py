@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timezone
 
 import httpx
+import tldextract
 import whois
 
 from models.osint_models import WhoisData
@@ -155,8 +156,6 @@ async def _fetch_rdap(hostname: str) -> WhoisData | None:
     (p.ej. Hugging Face Free Tier, algunos VPS).
     Documentación: https://rdap.org
     """
-    # Extraer el dominio raíz (sin subdominios) para RDAP
-    import tldextract
     extracted = tldextract.extract(hostname)
     root_domain = f"{extracted.domain}.{extracted.suffix}" if extracted.suffix else hostname
 
@@ -207,8 +206,6 @@ async def _fetch_rdap(hostname: str) -> WhoisData | None:
     except Exception as exc:
         logger.debug(f"RDAP error para {root_domain}: {exc}")
         return None
-
-
 
 class WhoisScanner:
     """Escáner de registros WHOIS."""

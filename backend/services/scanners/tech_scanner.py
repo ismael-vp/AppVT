@@ -3,7 +3,7 @@ import logging
 import os
 import re
 import warnings
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 from models.osint_models import PrivacyData, TechData
-from services.utils import is_safe_url, is_safe_url_async
+from services.utils import is_safe_url_async
 
 logger = logging.getLogger(__name__)
 
@@ -137,13 +137,6 @@ FINGERPRINTING_PATTERNS: list[tuple[str, str]] = [
     ("screen.width", "Huella Digital Gráfica (Resolución)"),
     ("screen.colordepth", "Huella Digital Gráfica (Color Depth)"),
 ]
-
-# M-11: _is_safe_url_async eliminado — usar is_safe_url_async de services.utils directamente
-# (usa asyncio.get_running_loop().getaddrinfo — no bloquante, no consume thread pool)
-
-def _is_safe_redirect(url: str) -> bool:
-    """Valida que una URL de redirección sea segura."""
-    return is_safe_url(url)
 
 def _analyze_privacy(html_lower: str, external_scripts: list[str]) -> PrivacyData:
     """Analiza el HTML en busca de indicadores de privacidad."""
@@ -315,7 +308,6 @@ class TechScanner:
                             location = response.headers.get("location")
                             if not location:
                                 break
-                            from urllib.parse import urljoin
                             next_url = urljoin(current_url, location)
                             if not await is_safe_url_async(next_url):
                                 break

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useThreatStore } from '@/store/useThreatStore';
 import { useToastStore } from '@/store/useToast';
-import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { AlertTriangle, RotateCcw, Share2 } from 'lucide-react';
 import SummaryTab from './ResultsComponents/tabs/SummaryTab';
 import TechnicalTab from './ResultsComponents/tabs/TechnicalTab';
 import CommunityTab from './tabs/CommunityTab';
@@ -14,6 +14,7 @@ import { useAiChat } from '@/hooks/useAiChat';
 import { useScriptAnalyzer } from '@/hooks/useScriptAnalyzer';
 import ImagePhishingPanel from './ResultsComponents/tabs/ImagePhishingPanel';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
@@ -27,9 +28,7 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
   );
   const [activeTab, setActiveTab] = useState<'ai' | 'technical' | 'community'>('ai');
 
-  // Bug #3 fix: useAiChat siempre se llama (regla de hooks), pero nunca con null —
-  // si scanResult es null pasamos un objeto vacío para que scan_context llegue como {}
-  const aiChat = useAiChat((scanResult ?? {}) as ScanResult);
+  const aiChat = useAiChat(scanResult);
   const scriptAnalyzer = useScriptAnalyzer();
 
   if (error) {
@@ -103,7 +102,7 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
               }
             }}
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            <Share2 size={13} />
             Compartir
           </Button>
         )}
@@ -132,9 +131,10 @@ function ResultsPanelInner({ isReadOnly }: { isReadOnly?: boolean }) {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`py-3.5 px-5 text-sm font-medium flex items-center transition-all relative whitespace-nowrap ${
-                  activeTab === tab ? 'text-white' : 'text-zinc-500 hover:text-zinc-300'
-                }`}
+                className={cn(
+                  "py-3.5 px-5 text-sm font-medium flex items-center transition-all relative whitespace-nowrap",
+                  activeTab === tab ? "text-white" : "text-zinc-500 hover:text-zinc-300"
+                )}
               >
                 {labels[tab]}
                 {activeTab === tab && (

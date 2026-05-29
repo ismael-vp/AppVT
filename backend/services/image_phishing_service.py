@@ -8,6 +8,7 @@ import re
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
+from services.security import PROMPT_INJECTION_PATTERNS
 from utils.openai_client import get_openai_client
 
 logger = logging.getLogger(__name__)
@@ -29,20 +30,6 @@ TESSERACT_CONFIG = os.getenv(
     r"--oem 3 --psm 6 -l spa+eng"
 )
 TESSERACT_TIMEOUT = float(os.getenv("TESSERACT_TIMEOUT", "30.0"))
-
-PROMPT_INJECTION_PATTERNS = [
-    re.compile(r"ignore\s+(all\s+)?(previous\s+)?instructions?", re.I),
-    re.compile(r"ignore\s+(the\s+)?system\s+prompt", re.I),
-    re.compile(r"you\s+are\s+now\s+a", re.I),
-    re.compile(r"from\s+now\s+on\s+you\s+are", re.I),
-    re.compile(r"disregard\s+(all\s+)?(previous\s+)?(instructions?|rules?)", re.I),
-    re.compile(r"forget\s+(all\s+)?(previous\s+)?(instructions?|context)", re.I),
-    re.compile(r"new\s+instruction[s]?:", re.I),
-    re.compile(r"system\s*:\s*", re.I),
-    re.compile(r"DAN\s*\(|Do\s+Anything\s+Now", re.I),
-    re.compile(r"jailbreak", re.I),
-    re.compile(r"developer\s+mode", re.I),
-]
 
 SENSITIVE_DATA_PATTERNS = [
     (re.compile(r"\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b"), "[TARJETA]"),

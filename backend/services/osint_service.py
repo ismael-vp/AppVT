@@ -9,6 +9,7 @@ import httpx
 from config import settings
 from models.osint_models import OSINTResponse
 from services.feed_service import FeedService
+from services.image_phishing_service import ImagePhishingService
 from services.ml_analyzer import analyze_osint_with_ml
 from services.scanners.dns_scanner import DNSScanner
 from services.scanners.form_scanner import FormScanner
@@ -18,6 +19,7 @@ from services.scanners.safe_browsing_scanner import SafeBrowsingScanner
 from services.scanners.ssl_scanner import SSLScanner
 from services.scanners.tech_scanner import TechScanner
 from services.scanners.whois_scanner import WhoisScanner
+from services.utils import TARGET_BRANDS, calculate_risk_level
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +78,44 @@ class OSINTService:
                 return None
 
         # Fix: Orquestación resiliente sin matar todo el bloque si uno falla
+        safe_url = url if url.startswith(('http://', 'https://')) else f"https://{url}"
+        encoded_url = quote(safe_url)
+        ua_desktop = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36"
+        ua_mobile = "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"
+
+        osint_data.screenshot_desktop = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&embed=screenshot.url&viewport.width=1920&viewport.height=1080&userAgent={quote(ua_desktop)}"
+
+        async def fetch_microlink_mobile():
+            microlink_url = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&device=iPhone+13&userAgent={quote(ua_mobile)}"
+            try:
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    response = await client.get(microlink_url)
+                    if response.status_code == 200:
+                        api_data = response.json().get("data", {})
+                        shot_url = api_data.get("screenshot", {}).get("url")
+                        ocr_brands = []
+                        if shot_url:
+                            try:
+                                img_resp = await client.get(shot_url, timeout=5.0)
+                                if img_resp.status_code == 200:
+                                    ocr_svc = ImagePhishingService()
+                                    ocr_text = await ocr_svc.extract_text_from_image(img_resp.content)
+                                    text_lower = ocr_text.lower()
+                                    ocr_brands = [b for b in TARGET_BRANDS if b in text_lower and len(b) > 3]
+                            except Exception as exc:
+                                logger.error(f"Error en OCR de la captura: {exc}")
+                        return shot_url, list(set(ocr_brands))
+            except Exception as e:
+                logger.warning(f"Error en Microlink (Mobile render) para {url}: {e}")
+            return None, []
+
         results = await asyncio.gather(
             _safe_call(GeoScanner.get_geolocation_and_reputation(ip_address), T_GEO) if ip_address else _null_coro(),
             _safe_call(WhoisScanner.get_whois(hostname), T_WHOIS),
             _safe_call(SSLScanner.get_ssl_info(hostname), T_SSL),
             _safe_call(DNSScanner.get_dns_info(hostname), T_DNS),
             _safe_call(TechScanner.get_tech_and_scripts(url, hostname), T_TECH),
+            _safe_call(fetch_microlink_mobile(), 15.0),
             return_exceptions=True
         )
 
@@ -94,74 +128,31 @@ class OSINTService:
             else:
                 processed_results.append(r)
 
-        geo_data, whois_data, ssl_data, dns_data, tech_data = processed_results
+        geo_data, whois_data, ssl_data, dns_data, tech_data, microlink_data = processed_results
 
-        if geo_data and not isinstance(geo_data, Exception):
+        # _safe_call absorbe excepciones; sólo comprobamos None (timeout/error)
+        if geo_data:
             osint_data.geolocation = geo_data.geolocation
             osint_data.abuse_confidence_score = geo_data.abuse_confidence_score
             osint_data.total_reports = geo_data.total_reports
 
-        if whois_data and not isinstance(whois_data, Exception):
+        if whois_data:
             osint_data.whois = whois_data
 
-        if ssl_data and not isinstance(ssl_data, Exception):
+        if ssl_data:
             osint_data.ssl = ssl_data
 
-        if dns_data and not isinstance(dns_data, Exception):
+        if dns_data:
             osint_data.dns = dns_data
 
-        if tech_data and not isinstance(tech_data, Exception):
+        if tech_data:
             osint_data.tech_data = tech_data
 
-        safe_url = url if url.startswith(('http://', 'https://')) else f"https://{url}"
-        encoded_url = quote(safe_url)
-        ua_desktop = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36"
-        ua_mobile = "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1"
-
-        osint_data.screenshot_desktop = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&embed=screenshot.url&viewport.width=1920&viewport.height=1080&userAgent={quote(ua_desktop)}"
-
-        try:
-            microlink_url = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&device=iPhone+13&userAgent={quote(ua_mobile)}"
-
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                response = await client.get(microlink_url)
-                if response.status_code == 200:
-                    api_data = response.json().get("data", {})
-                    shot_url = api_data.get("screenshot", {}).get("url")
-                    if shot_url:
-                        osint_data.screenshot_mobile = shot_url
-                        try:
-                            img_resp = await client.get(shot_url, timeout=5.0)
-                            if img_resp.status_code == 200:
-                                from services.image_phishing_service import ImagePhishingService
-                                ocr_svc = ImagePhishingService()
-                                ocr_text = await ocr_svc.extract_text_from_image(img_resp.content)
-                                if osint_data.tech_data:
-                                    from services.utils import TARGET_BRANDS
-                                    text_lower = ocr_text.lower()
-                                    ocr_brands = [b for b in TARGET_BRANDS if b in text_lower and len(b) > 3]
-                                    osint_data.tech_data.ocr_extracted_brands = list(set(ocr_brands))
-                        except Exception as exc:
-                            logger.error(f"Error en OCR de la captura: {exc}")
-
-                    real_title = api_data.get("title", "").strip().lower()
-                    if real_title and osint_data.tech_data and osint_data.tech_data.html_content:
-                        bot_title = OSINTService._extract_title_fast(osint_data.tech_data.html_content)
-                        if bot_title:
-                            # Evitar falsos positivos por pequeños cambios dinámicos en el título
-                            # Ej: "Amazon.com" vs "Amazon.com: Spend less"
-                            bot_title_clean = bot_title.replace("  ", " ").strip()
-                            real_title_clean = real_title.replace("  ", " ").strip()
-                            if (bot_title_clean not in real_title_clean) and (real_title_clean not in bot_title_clean):
-                                # Tokenizamos para ver si al menos comparten la primera palabra clave (ej. marca principal)
-                                bot_tokens = bot_title_clean.split()
-                                real_tokens = real_title_clean.split()
-                                if not (bot_tokens and real_tokens and bot_tokens[0] == real_tokens[0]):
-                                    pass
-                else:
-                    logger.warning(f"Microlink falló con status {response.status_code} para {url}")
-        except Exception as e:
-            logger.warning(f"Error en Microlink (Mobile render) para {url}: {type(e).__name__} - {e!s}")
+        if microlink_data:
+            shot_url, ocr_brands = microlink_data
+            osint_data.screenshot_mobile = shot_url
+            if ocr_brands and osint_data.tech_data:
+                osint_data.tech_data.ocr_extracted_brands = ocr_brands
 
         if not osint_data.screenshot_mobile:
             osint_data.screenshot_mobile = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&embed=screenshot.url&device=iPhone+13"
@@ -190,8 +181,8 @@ class OSINTService:
         except Exception as e:
             logger.error(f"Error en Heuristic Facade: {e}")
 
-        # ── TIER 0: Feed Local (OpenPhish / PhishTank) ──────────────────────────
-        # Consulta la BD local — latencia ~0ms, coste $0
+        # ── TIER 0: Feed Local (OpenPhish) ──────────────────────────
+        # Reutiliza el singleton — NO instancia nuevo FeedService por petición
         try:
             feed_result = await FeedService().check_url(url)
             if feed_result.detected:
@@ -229,14 +220,11 @@ class OSINTService:
         # === Machine Learning Integration ===
         ml_results = await asyncio.to_thread(analyze_osint_with_ml, url, osint_data)
         if ml_results["ml_score"] >= 50 and osint_data.heuristic_result:
-            # Combine the ML score with the existing heuristic score
             ml_score = ml_results["ml_score"]
             current_risk = osint_data.heuristic_result.risk_score
             new_risk = max(current_risk, ml_score) + (ml_score * 0.2 if current_risk > 30 else 0)
             osint_data.heuristic_result.risk_score = min(100, int(new_risk))
 
-            # Actualizar el nivel textual basado en el nuevo puntaje
-            from services.utils import calculate_risk_level
             osint_data.heuristic_result.level = calculate_risk_level(osint_data.heuristic_result.risk_score)
 
             if ml_results["flags"]:

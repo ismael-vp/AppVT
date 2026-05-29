@@ -4,7 +4,7 @@ import { useThreatStore, ChatMessage } from '@/store/useThreatStore';
 import { ScanResult } from '@/types';
 import { API_URL } from '@/lib/api';
 
-export function useAiChat(scanResult: ScanResult) {
+export function useAiChat(scanResult: ScanResult | null) {
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const isSubmittingRef = useRef(false);

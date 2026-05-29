@@ -24,7 +24,7 @@ from services.ai_service import AIService
 from services.image_phishing_service import ImagePhishingService
 from services.organic_dataset_service import OrganicDatasetService
 from services.osint_service import OSINTService
-from services.utils import is_safe_url_async
+from services.utils import calculate_risk_level, is_safe_url_async, resolve_redirect_chain
 from utils.cache_service import CacheService
 
 logger = logging.getLogger(__name__)
@@ -263,7 +263,6 @@ async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = B
             )
 
         # 1. Obtener la cadena de redirecciones primero
-        from services.utils import resolve_redirect_chain
         try:
             redirect_chain = await resolve_redirect_chain(request.url)
             final_url = redirect_chain[-1] if redirect_chain else request.url
@@ -330,16 +329,7 @@ async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = B
         if getattr(osint_data, "has_dangerous_form", False):
             final_score = min(100, final_score + 25)
             heuristic_reasons.append("Formulario de login sospechoso o redirección ofuscada")
-
-
-
-        dns_data = getattr(osint_data, "dns", None)
-        if dns_data and not getattr(dns_data, "has_mx", False) and final_score > 0:
-            final_score = min(100, final_score + 10)
-            heuristic_reasons.append("Dominio sin servidores de correo (MX) configurados")
-
         # Actualizamos el nivel según el nuevo score unificado
-        from services.utils import calculate_risk_level
         if osint_data.heuristic_result:
             osint_data.heuristic_result.risk_score = final_score
             osint_data.heuristic_result.level = calculate_risk_level(final_score)

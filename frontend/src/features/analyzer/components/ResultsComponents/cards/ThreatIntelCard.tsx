@@ -25,7 +25,7 @@ export default function ThreatIntelCard({ osintData }: ThreatIntelCardProps) {
       </h3>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* ── Feed local (OpenPhish / PhishTank) ─────────────────────── */}
+        {/* ── Feed local (OpenPhish) ─────────────────────── */}
         {hasFeed && (
           <div className="flex items-start gap-3 bg-[#0d0d0d] border border-zinc-800/50 rounded-xl p-5">
             <div className="shrink-0 mt-0.5 p-2 rounded-lg bg-zinc-900 border border-zinc-800">
@@ -43,7 +43,6 @@ export default function ThreatIntelCard({ osintData }: ThreatIntelCardProps) {
               <p className="text-xs text-zinc-400 leading-relaxed">
                 Esta URL coincide exactamente con una entrada reportada en{' '}
                 <span className="font-medium text-zinc-300">{osintData.feed_source ?? 'una base de datos de phishing conocida'}</span>.
-                {osintData.feed_source === 'PhishTank' && ' PhishTank es una plataforma de verificación colaborativa de URLs de phishing.'}
                 {osintData.feed_source === 'OpenPhish' && ' OpenPhish actualiza su feed cada pocas horas con nuevas URLs activas de phishing.'}
               </p>
             </div>
