@@ -45,9 +45,6 @@ IMAGE_ALLOWED_TYPES = {
     "image/gif", "image/bmp", "image/tiff"
 }
 
-
-# IPs de proxies de confianza (Nginx, load balancer, etc.)
-# Configurable vía env var: TRUSTED_PROXY_IPS=10.0.0.1,10.0.0.2
 _TRUSTED_PROXIES: set[str] = {
     ip.strip() for ip in os.getenv("TRUSTED_PROXY_IPS", "").split(",") if ip.strip()
 }
@@ -91,7 +88,6 @@ def _serialize_osint(osint: Any) -> dict:
 
     d = osint.model_dump() if hasattr(osint, "model_dump") else osint.dict()
 
-    # --- Aplanar @property de OSINTResponse al nivel raíz ---
     if hasattr(osint, "external_scripts"):
         d["external_scripts"]   = osint.external_scripts
     if hasattr(osint, "redirect_chain"):
@@ -115,7 +111,6 @@ def _serialize_osint(osint: Any) -> dict:
         us = osint.url_structure
         d["url_structure"]      = us.model_dump() if us and hasattr(us, "model_dump") else us
 
-    # --- Campos de detección híbrida ---
     if hasattr(osint, "safe_browsing_threat"):
         d["safe_browsing_threat"]   = osint.safe_browsing_threat
     if hasattr(osint, "safe_browsing_types"):
@@ -127,13 +122,11 @@ def _serialize_osint(osint: Any) -> dict:
     if hasattr(osint, "feed_source"):
         d["feed_source"]            = osint.feed_source
 
-    # --- Fix camelCase: el frontend usa abuseConfidenceScore / totalReports ---
     if "abuse_confidence_score" in d:
         d["abuseConfidenceScore"] = d.pop("abuse_confidence_score")
     if "total_reports" in d:
         d["totalReports"] = d.pop("total_reports")
 
-    # CamelCase para Geolocation
     if d.get("geolocation"):
         geo = d["geolocation"]
         if "country_code" in geo:
@@ -159,18 +152,6 @@ async def admin_key_dependency(request: Request):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Clave de administración incorrecta o ausente."
         )
-
-def serialize_to_dict(obj: Any) -> Any:
-    """Serializa objetos Pydantic o dicts a dicts estándar."""
-    if obj is None:
-        return {}
-    if isinstance(obj, dict):
-        return obj
-    if hasattr(obj, "model_dump"):
-        return obj.model_dump()
-    if hasattr(obj, "dict"):
-        return obj.dict()
-    raise TypeError(f"Objeto no serializable a dict: {type(obj)}")
 
 def validate_image_magic_bytes(image_bytes: bytes) -> str:
     """Valida el tipo REAL de una imagen inspeccionando sus magic bytes."""
@@ -246,23 +227,21 @@ class ScriptExplainRequest(BaseModel):
     @field_validator("script_url")
     @classmethod
     def check_script_url(cls, v: str) -> str:
-        return validate_url_format(v)  # sólo valida formato; el check SSRF (DNS) es async y ocurre en el handler
+        return validate_url_format(v)
 
 @router.post(
     "/analyze/url",
     dependencies=[Depends(rate_limit_dependency)]
 )
-async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = Body(...)):  # noqa: B008
+async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = Body(...)):
     """Analiza una URL en busca de phishing, malware y anomalías."""
     try:
-        # Comprobación SSRF async (DNS no bloqueante) — aquí, no en el validador Pydantic
         if not await is_safe_url_async(request.url):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="La URL no es segura para analizar. Se detectó un posible intento de SSRF."
             )
 
-        # 1. Obtener la cadena de redirecciones primero
         try:
             redirect_chain = await resolve_redirect_chain(request.url)
             final_url = redirect_chain[-1] if redirect_chain else request.url
@@ -271,16 +250,13 @@ async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = B
             redirect_chain = [request.url]
             final_url = request.url
 
-        # 2. La clave de caché utiliza la URL final resuelta
         url_cache_key = hashlib.sha256(final_url.encode()).hexdigest()
         cached_result = cache_service.get(url_cache_key, "url")
         if cached_result:
-            # Si hay caché, devolvemos el resultado pero actualizando el redirect_chain para el usuario actual
             if "osint_data" in cached_result and isinstance(cached_result["osint_data"], dict):
                 cached_result["osint_data"]["redirect_chain"] = redirect_chain
             return cached_result
 
-        # Ejecución del motor OSINT y heurística local
         try:
             osint_result = await OSINTService.get_osint_data(final_url)
             osint_data = osint_result
@@ -290,15 +266,19 @@ async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = B
             osint_data = None
             has_errors = True
 
-        # Simulamos vt_stats para mantener compatibilidad con el frontend
-        vt_stats = {"malicious": 0, "suspicious": 0, "harmless": 1, "undetected": 0, "timeout": 0}
+        if osint_data is None:
+            return {
+                "type": "url",
+                "stats": {"malicious": 0, "suspicious": 0, "harmless": 1, "undetected": 0, "timeout": 0},
+                "ai_summary": {"summary": "No se pudo completar el análisis.", "action_steps": ["Intente de nuevo más tarde."]},
+                "osint_data": {},
+                "redirect_chain": redirect_chain,
+                "status": "degraded"
+            }
 
-        # ── SISTEMA DE PUNTUACIÓN UNIFICADO ──────────────────────────────────
-        # Usamos el risk_score del motor heurístico (0-100) que ya integra ML
         final_score = getattr(osint_data.heuristic_result, "risk_score", 0) if osint_data.heuristic_result else 0
         heuristic_reasons = getattr(osint_data.heuristic_result, "flags", []) if osint_data.heuristic_result else []
 
-        # Integrar detectores externos y de osint_service al score final (0-100)
         dns_data_r = getattr(osint_data, "dns", None)
         if dns_data_r and (getattr(dns_data_r, "spamhaus_listed", False) or getattr(dns_data_r, "surbl_listed", False)):
             final_score = max(final_score, 95)
@@ -329,15 +309,13 @@ async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = B
         if getattr(osint_data, "has_dangerous_form", False):
             final_score = min(100, final_score + 25)
             heuristic_reasons.append("Formulario de login sospechoso o redirección ofuscada")
-        # Actualizamos el nivel según el nuevo score unificado
+
         if osint_data.heuristic_result:
             osint_data.heuristic_result.risk_score = final_score
             osint_data.heuristic_result.level = calculate_risk_level(final_score)
-            # Evitamos duplicados en flags manteniendo el orden
             seen = set()
             osint_data.heuristic_result.flags = [x for x in heuristic_reasons if not (x in seen or seen.add(x))]
 
-        # Convertir a vt_stats normalizado (0 o 1) para el frontend
         is_malicious = final_score >= 50
         is_suspicious = 25 <= final_score < 50
         vt_stats = {
@@ -349,7 +327,6 @@ async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = B
             "heuristic_flag": " | ".join(heuristic_reasons)
         }
 
-        # Serializar una única vez — reutilizado para IA y para la respuesta JSON
         serialized_osint = _serialize_osint(osint_data)
 
         ai_summary = await ai_service.generate_analysis_explanation(serialized_osint, "url")
@@ -362,14 +339,12 @@ async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = B
             "status": "success"
         }
 
-        # Sobrescribimos el redirect_chain con la cadena completa
         if isinstance(result["osint_data"], dict):
             result["osint_data"]["redirect_chain"] = redirect_chain
 
         if not has_errors:
             cache_service.set(url_cache_key, result, "url")
 
-            # Guardamos la muestra orgánica OSINT (en segundo plano)
             background_tasks.add_task(
                 OrganicDatasetService.save_organic_sample,
                 request.url,
@@ -392,7 +367,7 @@ async def analyze_url(background_tasks: BackgroundTasks, request: URLRequest = B
     "/analyze/image",
     dependencies=[Depends(rate_limit_dependency)]
 )
-async def analyze_image(file: UploadFile = File(...)):  # noqa: B008
+async def analyze_image(file: UploadFile = File(...)):
     """Analiza una imagen en busca de phishing mediante OCR e IA."""
     if not file.filename:
         raise HTTPException(
@@ -452,7 +427,7 @@ async def analyze_image(file: UploadFile = File(...)):  # noqa: B008
     "/chat",
     dependencies=[Depends(rate_limit_dependency)]
 )
-async def chat_endpoint(request: ChatRequest = Body(...)):  # noqa: B008
+async def chat_endpoint(request: ChatRequest = Body(...)):
     """Endpoint de chat con contexto del escaneo."""
     try:
         clean_context = request.scan_context.copy()
@@ -462,7 +437,6 @@ async def chat_endpoint(request: ChatRequest = Body(...)):  # noqa: B008
                 k: v for k, v in clean_context["osint_data"].items()
                 if k not in ("html_content", "redirect_chain", "external_scripts")
             }
-            # Sanitizamos texto libre controlado por el atacante (Ej: Título)
             if "tech_data" in clean_context["osint_data"]:
                 tech = clean_context["osint_data"]["tech_data"]
                 if tech and "page_title" in tech:
@@ -493,10 +467,9 @@ async def chat_endpoint(request: ChatRequest = Body(...)):  # noqa: B008
     "/explain-script",
     dependencies=[Depends(rate_limit_dependency)]
 )
-async def explain_script_endpoint(request: ScriptExplainRequest = Body(...)):  # noqa: B008
+async def explain_script_endpoint(request: ScriptExplainRequest = Body(...)):
     """Explica un script remoto."""
     try:
-        # Comprobación SSRF async (DNS no bloqueante) — igual que analyze_url
         if not await is_safe_url_async(request.script_url):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -536,7 +509,7 @@ class ModerateCommentRequest(BaseModel):
     "/moderate/comment",
     dependencies=[Depends(rate_limit_dependency)]
 )
-async def moderate_comment_endpoint(request: ModerateCommentRequest = Body(...)):  # noqa: B008
+async def moderate_comment_endpoint(request: ModerateCommentRequest = Body(...)):
     """Evalúa si un comentario aporta valor técnico o es irrelevante."""
     try:
         result = await ai_service.moderate_comment(request.content)
@@ -545,5 +518,4 @@ async def moderate_comment_endpoint(request: ModerateCommentRequest = Body(...))
         raise
     except Exception as exc:
         logger.error(f"Error no controlado en moderate_comment_endpoint: {exc}", exc_info=True)
-        # Fallback tolerante a fallos
-        return {"is_valuable": True, "reason": "Aprobado por fallback de seguridad"}
+        return {"is_valuable": False, "reason": "Rechazado por fallo en el sistema de moderación"}

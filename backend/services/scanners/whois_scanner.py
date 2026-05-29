@@ -51,8 +51,6 @@ def _validate_hostname(hostname: str) -> str:
     if len(hostname) > MAX_HOSTNAME_LENGTH:
         raise ValueError(f"Hostname demasiado largo: {len(hostname)}")
 
-    # Fix: separar la detección de IP del except genérico para no silenciar
-    # el ValueError de rechazo con el mismo bloque que lo captura.
     try:
         ipaddress.ip_address(hostname)
         is_ip = True
@@ -169,7 +167,6 @@ async def _fetch_rdap(hostname: str) -> WhoisData | None:
 
             data = response.json()
 
-            # Extraer registrar
             registrar = None
             for entity in data.get("entities", []):
                 roles = entity.get("roles", [])
@@ -182,7 +179,6 @@ async def _fetch_rdap(hostname: str) -> WhoisData | None:
                                 break
                     break
 
-            # Extraer fechas de eventos
             creation_date = None
             expiration_date = None
             for event in data.get("events", []):
@@ -220,15 +216,12 @@ class WhoisScanner:
             return None
 
         try:
-            # ── RDAP (HTTPS, funciona en entornos restringidos como Hugging Face) ──
-            # RDAP es el sucesor moderno de WHOIS, usa puerto 443 (no el 43 que bloquean)
             rdap_data = await _fetch_rdap(safe_hostname)
             if rdap_data:
                 return rdap_data
         except Exception as exc:
             logger.debug(f"RDAP falló para {safe_hostname}, intentando python-whois: {exc}")
 
-        # ── Fallback: python-whois clásico (puerto 43 TCP) ──
         try:
             domain_info = await asyncio.wait_for(
                 asyncio.to_thread(whois.whois, safe_hostname),

@@ -1,446 +1,229 @@
-import gzip
+"""
+Servicio de caché persistente para PhishingScanner.
+
+Implementa una estrategia dual:
+  - Redis (si REDIS_URL está configurado) para entornos distribuidos.
+  - SQLite local como fallback universal.
+
+La interfaz pública (get, set, check_rate_limit) es idéntica en ambos backends,
+lo que permite cambiar de backend sin tocar el código cliente.
+"""
+
+import asyncio
 import json
 import logging
 import os
-import re
 import sqlite3
+import threading
 import time
-from datetime import datetime, timedelta
 from typing import Any
-
-import redis
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB_NAME = os.getenv("CACHE_DB_NAME", "threat_cache.db")
-DEFAULT_DB_DIR = os.getenv("CACHE_DB_DIR", "")
-DEFAULT_TTL_HOURS = int(os.getenv("CACHE_DEFAULT_TTL_HOURS", "24"))
-MAX_KEY_LENGTH = int(os.getenv("CACHE_MAX_KEY_LENGTH", "512"))
-MAX_DATA_SIZE_BYTES = int(os.getenv("CACHE_MAX_DATA_SIZE_BYTES", "500_000"))
-COMPRESSION_ENABLED = os.getenv("CACHE_COMPRESSION_ENABLED", "true").lower() == "true"
-COMPRESSION_THRESHOLD = int(os.getenv("CACHE_COMPRESSION_THRESHOLD", "1024"))
-WAL_MODE = os.getenv("CACHE_WAL_MODE", "true").lower() == "true"
-MAX_DB_SIZE_MB = int(os.getenv("CACHE_MAX_DB_SIZE_MB", "500"))
-CLEANUP_INTERVAL_HOURS = int(os.getenv("CACHE_CLEANUP_INTERVAL_HOURS", "6"))
-DB_LOCK_RETRY_ATTEMPTS = int(os.getenv("CACHE_DB_LOCK_RETRY_ATTEMPTS", "3"))
-DB_LOCK_RETRY_DELAY = float(os.getenv("CACHE_DB_LOCK_RETRY_DELAY", "0.1"))
-REDIS_URL = os.getenv("REDIS_URL", "").strip()
+CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", str(60 * 60 * 6)))
+CACHE_MAX_DB_SIZE_BYTES = int(os.getenv("CACHE_MAX_DB_SIZE_MB", "100")) * 1024 * 1024
+CACHE_DB_NAME = os.getenv("CACHE_DB_NAME", "cache.db")
+REDIS_URL = os.getenv("REDIS_URL", "")
 
-def _safe_json_dumps(obj: Any) -> str:
-    """Serializa a JSON de forma segura, manejando Pydantic y datetime."""
-    def _default_serializer(o):
-        if hasattr(o, "model_dump"):
-            return o.model_dump()
-        if hasattr(o, "dict"):
-            return o.dict()
-        if hasattr(o, "isoformat"):
-            return o.isoformat()
-        return str(o)
-    return json.dumps(obj, default=_default_serializer, ensure_ascii=False)
 
-def _validate_key(key: str) -> str:
-    """Valida que una key de caché sea segura."""
-    if not key or not isinstance(key, str):
-        raise ValueError("La key de caché no puede estar vacía")
-    key = key.strip()
-    if not key:
-        raise ValueError("La key de caché no puede estar vacía")
-    if len(key) > MAX_KEY_LENGTH:
-        raise ValueError(f"Key demasiado larga: {len(key)}")
-    if not re.match(r"^[a-zA-Z0-9_\.\-/]+$", key):
-        raise ValueError(f"Key contiene caracteres inválidos: {key[:50]}")
-    return key
+class _LocalRateLimiter:
+    """Rate limiter en memoria para cuando Redis no está disponible."""
 
-def _validate_cache_type(cache_type: str) -> str:
-    """Valida el tipo de caché."""
-    if not cache_type or not isinstance(cache_type, str):
-        raise ValueError("El tipo de caché no puede estar vacío")
-    cache_type = cache_type.strip().lower()
-    if not cache_type or len(cache_type) > 50:
-        raise ValueError("Tipo de caché inválido o demasiado largo")
-    if not re.match(r"^[a-z0-9_]+$", cache_type):
-        raise ValueError("Tipo de caché contiene caracteres inválidos")
-    return cache_type
+    def __init__(self):
+        self._counts: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
 
-def _get_db_path(db_path: str | None = None) -> str:
-    """Retorna la ruta segura de la base de datos."""
-    if db_path:
-        basename = os.path.basename(db_path)
-        if not basename or basename != db_path:
-            raise ValueError("db_path debe ser un nombre de archivo simple")
-        filename = basename
-    else:
-        filename = DEFAULT_DB_NAME
+    def check_rate_limit(self, key: str, limit: int, window: int) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            calls = [t for t in self._counts.get(key, []) if now - t < window]
+            if len(calls) >= limit:
+                return False
+            calls.append(now)
+            self._counts[key] = calls
+            return True
 
-    if DEFAULT_DB_DIR:
-        base_dir = os.path.abspath(DEFAULT_DB_DIR)
-    else:
-        docker_data_dir = "/app/data"
-        if os.path.isdir(docker_data_dir):
-            base_dir = docker_data_dir
-        else:
-            base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
-
-    os.makedirs(base_dir, exist_ok=True)
-    return os.path.join(base_dir, filename)
 
 class CacheService:
-    """Servicio de caché persistente basado en SQLite."""
+    """Caché unificada con backend Redis o SQLite."""
 
-    def __init__(self, db_path: str | None = None):
-        self.use_redis = False
-        self.redis_client = None
-        self._local_rl_store = {}
+    _instance: "CacheService | None" = None
+    _initialized: bool = False
+    _lock = threading.Lock()
+
+    def __new__(cls) -> "CacheService":
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self) -> None:
+        with self._lock:
+            if self._initialized:
+                return
+            self._initialized = True
+
+        self._redis = None
+        self._db_path = self._resolve_db_path()
+        self._local_rate_limiter = _LocalRateLimiter()
 
         if REDIS_URL:
-            try:
-                # Usar Redis si REDIS_URL está presente
-                self.redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=False)
-                self.redis_client.ping()
-                self.use_redis = True
-                logger.info("✅ Conectado a Redis para caché y rate limit")
-            except Exception as e:
-                logger.error(f"❌ Fallo al conectar a Redis: {e}. Usando SQLite local.")
-                self.use_redis = False
+            self._try_init_redis()
 
-        if not self.use_redis:
-            self.db_path = _get_db_path(db_path)
-            self._last_cleanup = 0.0
-            self._cleanup_interval_seconds = CLEANUP_INTERVAL_HOURS * 3600
-            self._init_db()
-
-    def _init_db(self):
-        """Inicializa la base de datos con WAL mode e índices."""
-        def _do_init():
-            with sqlite3.connect(self.db_path, timeout=10.0) as conn:
-                if WAL_MODE:
-                    conn.execute("PRAGMA journal_mode=WAL")
-                    conn.execute("PRAGMA synchronous=NORMAL")
-                else:
-                    conn.execute("PRAGMA journal_mode=DELETE")
-
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS scan_cache (
-                        key TEXT NOT NULL,
-                        data BLOB NOT NULL,
-                        type TEXT NOT NULL,
-                        timestamp DATETIME NOT NULL,
-                        compressed INTEGER NOT NULL DEFAULT 0,
-                        size_bytes INTEGER NOT NULL DEFAULT 0,
-                        PRIMARY KEY (key, type)
-                    )
-                """)
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_type_timestamp ON scan_cache(type, timestamp)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON scan_cache(timestamp)")
-                conn.commit()
-
-        self._with_retry(_do_init)
-
-    def _with_retry(self, operation, *args, **kwargs):
-        """Ejecuta una operación SQLite con retry ante locks."""
-        last_exc = None
-        for attempt in range(DB_LOCK_RETRY_ATTEMPTS):
-            try:
-                return operation(*args, **kwargs)
-            except sqlite3.OperationalError as exc:
-                if "database is locked" in str(exc).lower():
-                    last_exc = exc
-                    delay = DB_LOCK_RETRY_DELAY * (2 ** attempt)
-                    logger.warning(f"SQLite locked (intento {attempt + 1}), esperando {delay:.2f}s")
-                    # time.sleep() aquí bloquearía el event loop si se llama desde un contexto async.
-                    # Las operaciones SQLite ya están wrapped en asyncio.to_thread en sus call-sites,
-                    # así que este sleep ocurre en un hilo worker y NO bloquea el loop.
-                    time.sleep(delay)
-                else:
-                    raise
-        raise last_exc
-
-    def _maybe_cleanup(self):
-        """Ejecuta limpieza de expirados si ha pasado el intervalo."""
-        now = time.time()
-        if now - self._last_cleanup < self._cleanup_interval_seconds:
-            return
-        self._last_cleanup = now
-        try:
-            deleted = self._cleanup_expired()
-            if deleted > 0:
-                logger.info(f"Limpieza automática de caché: {deleted} registros eliminados")
-        except Exception as exc:
-            logger.warning(f"Error en limpieza de caché: {exc}")
-
-    def _cleanup_expired(self) -> int:
-        """Elimina registros expirados y ejecuta VACUUM en conexión separada."""
-        def _do_cleanup():
-            deleted = 0
-            with sqlite3.connect(self.db_path, timeout=10.0) as conn:
-                cutoff = (datetime.now() - timedelta(hours=DEFAULT_TTL_HOURS)).isoformat()
-                cursor = conn.execute("DELETE FROM scan_cache WHERE timestamp < ?", (cutoff,))
-                conn.commit()
-                deleted = cursor.rowcount
-
-            # M-7: VACUUM no puede ejecutarse dentro de una transacción.
-            # Se ejecuta en una conexión separada con autocommit (isolation_level=None).
-            try:
-                with sqlite3.connect(self.db_path, isolation_level=None, timeout=5.0) as vconn:
-                    vconn.execute("VACUUM")
-            except sqlite3.OperationalError:
-                pass  # Si falla (DB ocupada), no es crítico
-
-            return deleted
-        return self._with_retry(_do_cleanup)
-
-    def _check_db_size(self) -> bool:
-        """Verifica el tamaño de la DB. M-8: envuelve cleanup en try/except."""
-        try:
-            size_mb = os.path.getsize(self.db_path) / (1024 * 1024)
-            if size_mb > MAX_DB_SIZE_MB:
-                logger.warning(f"Caché excede límite: {size_mb:.1f}MB > {MAX_DB_SIZE_MB}MB")
-                try:
-                    self._cleanup_expired()
-                except Exception as exc:
-                    logger.warning(f"Error en cleanup de emergencia: {exc}")
-                return False
-            return True
-        except OSError:
-            return True
-
-    def check_rate_limit(self, client_ip: str, max_requests: int, window_seconds: int) -> bool:
-        """Verifica el límite de tasa usando Redis (si está activo) o memoria local."""
-        if self.use_redis and self.redis_client:
-            try:
-                redis_key = f"rate_limit:{client_ip}"
-                current = self.redis_client.incr(redis_key)
-                if current == 1:
-                    self.redis_client.expire(redis_key, window_seconds)
-                return current <= max_requests
-            except Exception as e:
-                logger.error(f"Error en Redis rate limit: {e}")
-                # H-2: No caer en open (allow-all) si Redis falla.
-                # Usar el store en memoria local como fallback seguro.
-                logger.warning("Redis no disponible para rate limit — usando fallback en memoria")
-                # Fall-through al bloque de memoria local (no return)
-
-        # Fallback a memoria local
-        now = time.time()
-
-        # Limpieza periódica suave (cada vez que el dict supera 10k elementos)
-        if len(self._local_rl_store) > 10000:
-            keys_to_delete = []
-            for ip, times in self._local_rl_store.items():
-                if not any(now - t < window_seconds for t in times):
-                    keys_to_delete.append(ip)
-            for k in keys_to_delete:
-                del self._local_rl_store[k]
-            # Fallback de seguridad extrema
-            if len(self._local_rl_store) > 20000:
-                self._local_rl_store.clear()
-
-        window = self._local_rl_store.get(client_ip, [])
-        window = [t for t in window if now - t < window_seconds]
-        if len(window) >= max_requests:
-            self._local_rl_store[client_ip] = window
-            return False
-        window.append(now)
-        self._local_rl_store[client_ip] = window
-        return True
-
-    def get(self, key: str, cache_type: str, ttl_hours: int | None = None) -> dict | None:
-        """Recupera un valor del caché si no ha expirado."""
-        try:
-            key = _validate_key(key)
-            cache_type = _validate_cache_type(cache_type)
-        except ValueError as exc:
-            logger.warning(f"Validación de caché rechazada: {exc}")
-            return None
-
-        ttl = ttl_hours if ttl_hours is not None else DEFAULT_TTL_HOURS
-
-        if self.use_redis and self.redis_client:
-            try:
-                redis_key = f"cache:{cache_type}:{key}"
-                data_blob = self.redis_client.get(redis_key)
-                if not data_blob:
-                    return None
-
-                # Check for gzip magic bytes
-                if data_blob.startswith(b'\x1f\x8b'):
-                    data_blob = gzip.decompress(data_blob)
-
-                return json.loads(data_blob.decode("utf-8"))
-            except Exception as e:
-                logger.error(f"Error leyendo de Redis: {e}")
-                return None
-
-        def _do_get():
-            with sqlite3.connect(self.db_path, timeout=10.0) as conn:
-                cursor = conn.execute(
-                    "SELECT data, timestamp, compressed FROM scan_cache WHERE key = ? AND type = ?",
-                    (key, cache_type)
-                )
-                row = cursor.fetchone()
-                if not row:
-                    return None
-
-                data_blob, timestamp_str, compressed = row
-                if datetime.now() - datetime.fromisoformat(timestamp_str) >= timedelta(hours=ttl):
-                    conn.execute("DELETE FROM scan_cache WHERE key = ? AND type = ?", (key, cache_type))
-                    conn.commit()
-                    return None
-
-                if compressed:
-                    data_blob = gzip.decompress(data_blob)
-
-                return json.loads(data_blob.decode("utf-8"))
-
-        try:
-            result = self._with_retry(_do_get)
-            self._maybe_cleanup()
-            return result
-        except Exception as exc:
-            logger.error(f"Error leyendo caché para {key}: {exc}")
-            return None
-
-    def set(self, key: str, data: Any, cache_type: str):
-        """Almacena un valor en el caché."""
-        try:
-            key = _validate_key(key)
-            cache_type = _validate_cache_type(cache_type)
-        except ValueError as exc:
-            logger.warning(f"Validación de caché rechazada: {exc}")
-            return
-
-        if self.use_redis and self.redis_client:
-            try:
-                data_str = _safe_json_dumps(data)
-                data_bytes = data_str.encode("utf-8")
-
-                if COMPRESSION_ENABLED and len(data_bytes) > COMPRESSION_THRESHOLD:
-                    compressed_data = gzip.compress(data_bytes, compresslevel=6)
-                    if len(compressed_data) < len(data_bytes):
-                        data_bytes = compressed_data
-
-                redis_key = f"cache:{cache_type}:{key}"
-                ttl_seconds = DEFAULT_TTL_HOURS * 3600
-                self.redis_client.setex(redis_key, ttl_seconds, data_bytes)
-                return
-            except Exception as e:
-                logger.error(f"Error escribiendo en Redis: {e}")
-                return
-
-        if not self._check_db_size():
-            return
-
-        try:
-            data_str = _safe_json_dumps(data)
-        except Exception as exc:
-            logger.error(f"Error serializando datos para caché: {exc}")
-            return
-
-        data_bytes = data_str.encode("utf-8")
-        original_size = len(data_bytes)
-
-        if original_size > MAX_DATA_SIZE_BYTES:
-            if isinstance(data, dict):
-                data = self._truncate_large_fields(data)
-                try:
-                    data_str = _safe_json_dumps(data)
-                    data_bytes = data_str.encode("utf-8")
-                    original_size = len(data_bytes)
-                    if original_size > MAX_DATA_SIZE_BYTES:
-                        return
-                except Exception:
-                    return
-            else:
-                return
-
-        compressed = 0
-        if COMPRESSION_ENABLED and original_size > COMPRESSION_THRESHOLD:
-            compressed_data = gzip.compress(data_bytes, compresslevel=6)
-            if len(compressed_data) < original_size:
-                data_bytes = compressed_data
-                compressed = 1
-
-        timestamp = datetime.now().isoformat()
-
-        def _do_set():
-            with sqlite3.connect(self.db_path, timeout=10.0) as conn:
-                conn.execute(
-                    """INSERT OR REPLACE INTO scan_cache
-                       (key, data, type, timestamp, compressed, size_bytes)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (key, data_bytes, cache_type, timestamp, compressed, original_size)
-                )
-                conn.commit()
-
-        try:
-            self._with_retry(_do_set)
-            self._maybe_cleanup()
-        except Exception as exc:
-            logger.error(f"Error escribiendo caché para {key}: {exc}")
-
-    def delete(self, key: str, cache_type: str):
-        """Elimina una entrada específica."""
-        try:
-            key = _validate_key(key)
-            cache_type = _validate_cache_type(cache_type)
-        except ValueError:
-            return
-
-        if self.use_redis and self.redis_client:
-            try:
-                self.redis_client.delete(f"cache:{cache_type}:{key}")
-                return
-            except Exception as e:
-                logger.error(f"Error borrando de Redis: {e}")
-                return
-
-        def _do_delete():
-            with sqlite3.connect(self.db_path, timeout=10.0) as conn:
-                conn.execute("DELETE FROM scan_cache WHERE key = ? AND type = ?", (key, cache_type))
-                conn.commit()
-        self._with_retry(_do_delete)
-
-    def clear_all(self) -> bool:
-        """Borra absolutamente toda la caché."""
-        if self.use_redis and self.redis_client:
-            try:
-                self.redis_client.flushdb()
-                logger.info("Caché de Redis completamente eliminada")
-                return True
-            except Exception as e:
-                logger.error(f"Error limpiando Redis: {e}")
-                return False
-
-        def _do_clear():
-            with sqlite3.connect(self.db_path, timeout=10.0) as conn:
-                cursor = conn.execute("DELETE FROM scan_cache")
-                deleted = cursor.rowcount
-                conn.commit()
-            # M-7 aplicó también aquí: VACUUM en conexión separada
-            try:
-                with sqlite3.connect(self.db_path, isolation_level=None, timeout=5.0) as vconn:
-                    vconn.execute("VACUUM")
-            except sqlite3.OperationalError:
-                pass
-            return deleted
-        try:
-            deleted = self._with_retry(_do_clear)
-            logger.info(f"Caché completamente eliminada ({deleted} registros)")
-            return True
-        except Exception:
-            return False
+        self._init_sqlite()
+        logger.info(f"✅ CacheService inicializado. Backend: {'Redis' if self._redis else 'SQLite'}")
 
     @staticmethod
-    def _truncate_large_fields(data: dict, max_field_size: int = 5000) -> dict:
-        """Trunca campos string grandes en un dict."""
-        result = {}
-        for k, v in data.items():
-            if isinstance(v, str) and len(v) > max_field_size:
-                result[k] = v[:max_field_size] + "... [TRUNCADO]"
-            elif isinstance(v, dict):
-                result[k] = CacheService._truncate_large_fields(v, max_field_size)
-            elif isinstance(v, list):
-                result[k] = [(i[:max_field_size] + "... [TRUNCADO]" if isinstance(i, str) and len(i) > max_field_size else i) for i in v]
-            else:
-                result[k] = v
-        return result
+    def _resolve_db_path() -> str:
+        docker_data_dir = "/app/data"
+        base_dir = docker_data_dir if os.path.isdir(docker_data_dir) else os.getcwd()
+        os.makedirs(base_dir, exist_ok=True)
+        return os.path.join(base_dir, CACHE_DB_NAME)
+
+    def _try_init_redis(self) -> None:
+        try:
+            import redis
+            client = redis.Redis.from_url(REDIS_URL, socket_connect_timeout=3, socket_timeout=3, decode_responses=True)
+            client.ping()
+            self._redis = client
+            logger.info("✅ Redis conectado correctamente.")
+        except Exception as exc:
+            logger.warning(f"Redis no disponible: {exc}. Usando SQLite como fallback.")
+            self._redis = None
+
+    def _init_sqlite(self) -> None:
+        with sqlite3.connect(self._db_path, timeout=15.0) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS cache (
+                    key         TEXT PRIMARY KEY,
+                    value       TEXT NOT NULL,
+                    cache_type  TEXT DEFAULT 'url',
+                    created_at  INTEGER NOT NULL,
+                    expires_at  INTEGER NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_expires ON cache(expires_at)")
+            conn.commit()
+
+    def get(self, key: str, cache_type: str = "url") -> Any:
+        try:
+            if self._redis:
+                redis_key = f"phishscan:{cache_type}:{key}"
+                value = self._redis.get(redis_key)
+                if value:
+                    return json.loads(value)
+                return None
+
+            with sqlite3.connect(self._db_path, timeout=5.0) as conn:
+                row = conn.execute(
+                    "SELECT value FROM cache WHERE key = ? AND cache_type = ? AND expires_at > ?",
+                    (key, cache_type, int(time.time()))
+                ).fetchone()
+                if row:
+                    return json.loads(row[0])
+                return None
+        except Exception as exc:
+            logger.error(f"CacheService.get error: {exc}")
+            return None
+
+    def set(self, key: str, value: Any, cache_type: str = "url", ttl: int | None = None) -> bool:
+        ttl = ttl or CACHE_TTL_SECONDS
+        try:
+            serialized = json.dumps(value, ensure_ascii=False)
+        except (TypeError, ValueError) as exc:
+            logger.error(f"CacheService: no se puede serializar el valor: {exc}")
+            return False
+
+        try:
+            if self._redis:
+                redis_key = f"phishscan:{cache_type}:{key}"
+                self._redis.setex(redis_key, ttl, serialized)
+                return True
+
+            now = int(time.time())
+            with sqlite3.connect(self._db_path, timeout=5.0) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO cache (key, value, cache_type, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+                    (key, serialized, cache_type, now, now + ttl)
+                )
+                conn.commit()
+
+            self._check_db_size()
+            return True
+        except Exception as exc:
+            logger.error(f"CacheService.set error: {exc}")
+            return False
+
+    def _check_db_size(self) -> None:
+        """Verifica el tamaño de la BD SQLite y aplica limpieza si supera el umbral."""
+        try:
+            file_size = os.path.getsize(self._db_path)
+            if file_size > CACHE_MAX_DB_SIZE_BYTES:
+                logger.warning(f"CacheService: BD demasiado grande ({file_size / (1024**2):.1f} MB). Limpiando...")
+                self._cleanup_old_entries()
+        except Exception as exc:
+            logger.warning(f"CacheService error comprobando tamaño de BD: {exc}")
+
+    def _cleanup_old_entries(self) -> None:
+        """Elimina entradas expiradas y compacta la BD (VACUUM en conexión separada)."""
+        try:
+            with sqlite3.connect(self._db_path, timeout=15.0) as conn:
+                deleted = conn.execute(
+                    "DELETE FROM cache WHERE expires_at <= ?",
+                    (int(time.time()),)
+                ).rowcount
+                conn.commit()
+                logger.info(f"CacheService: {deleted} entradas expiradas eliminadas.")
+
+            with sqlite3.connect(self._db_path, timeout=30.0, isolation_level=None) as conn:
+                conn.execute("VACUUM")
+        except Exception as exc:
+            logger.error(f"CacheService error en limpieza: {exc}")
+
+    def clear_all(self) -> bool:
+        """Elimina todas las entradas del caché."""
+        try:
+            if self._redis:
+                pattern = "phishscan:*"
+                keys = self._redis.keys(pattern)
+                if keys:
+                    self._redis.delete(*keys)
+                logger.info(f"CacheService: {len(keys)} entradas eliminadas de Redis.")
+                return True
+
+            with sqlite3.connect(self._db_path, timeout=15.0) as conn:
+                count = conn.execute("SELECT COUNT(*) FROM cache").fetchone()[0]
+                conn.execute("DELETE FROM cache")
+                conn.commit()
+
+            with sqlite3.connect(self._db_path, timeout=30.0, isolation_level=None) as conn:
+                conn.execute("VACUUM")
+
+            logger.info(f"CacheService: {count} entradas eliminadas de SQLite.")
+            return True
+        except Exception as exc:
+            logger.error(f"CacheService.clear_all error: {exc}")
+            return False
+
+    def check_rate_limit(self, client_id: str, limit: int, window: int) -> bool:
+        """Comprueba y actualiza el rate limit para un cliente."""
+        try:
+            if self._redis:
+                pipe_key = f"phishscan:rl:{client_id}"
+                with self._redis.pipeline() as pipe:
+                    now = time.time()
+                    window_start = now - window
+                    pipe.zremrangebyscore(pipe_key, 0, window_start)
+                    pipe.zadd(pipe_key, {str(now): now})
+                    pipe.zcard(pipe_key)
+                    pipe.expire(pipe_key, window)
+                    _, _, count, _ = pipe.execute()
+                    return count <= limit
+
+            return self._local_rate_limiter.check_rate_limit(client_id, limit, window)
+
+        except Exception as exc:
+            logger.warning(f"CacheService rate limit error (fallback permissive): {exc}")
+            return self._local_rate_limiter.check_rate_limit(client_id, limit, window)

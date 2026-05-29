@@ -174,13 +174,13 @@ class FormScanner:
                     result.reason = "Exfiltración de datos detectada (webhook)."
                     return result
 
-            has_password = bool(
+            has_password |= bool(
                 form.find("input", type="password")
                 or form.find("input", {"name": _RE_PASSWORD_NAME})
                 or form.find("input", {"id": _RE_PASSWORD_ID})
             )
 
-            has_sensitive = bool(
+            has_sensitive |= bool(
                 form.find("input", type="email")
                 or form.find("input", {"name": _RE_SENSITIVE_NAME})
             )

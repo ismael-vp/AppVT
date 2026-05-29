@@ -15,11 +15,6 @@ from services.scanners.typosquatting_scanner import TyposquattingScanner
 from services.scanners.url_structure_analyzer import URLStructureAnalyzer
 from services.utils import TARGET_BRANDS, calculate_risk_level
 
-# Mapa de ownership legítimo de marca:
-# clave   = nombre de marca (lowercase, igual que en TARGET_BRANDS)
-# valor   = set de dominios registrados (tldextract.domain) que son dueños legítimos
-# Úsate para evitar falsos positivos cuando una marca aparece en el dominio de su empresa madre.
-# Ejemplo: Gmail (gmail) es propiedad de Google (google) → google.com no es suplantación de Gmail.
 BRAND_LEGITIMATE_OWNERS: dict[str, set[str]] = {
     # Google ecosystem
     "gmail":      {"google", "gmail", "googlemail"},
@@ -71,8 +66,6 @@ def _extract_hostname(url: str) -> str:
     if not parsed.hostname:
         raise ValueError(f"No se pudo extraer hostname de la URL: {url}")
     return parsed.hostname.lower()
-
-# _calculate_level eliminado: usar calculate_risk_level de services.utils
 
 def _compute_typosquatting_penalty(typos_data: TyposquattingData) -> int:
     """Calcula una penalización graduada por typosquatting."""
@@ -166,9 +159,6 @@ class HeuristicScanner:
                 logger.error(f"Error calculando edad del dominio: {e}")
 
         if osint_data and osint_data.tech_data:
-            # M-X: Desactivados los incrementos directos de riesgo por obfuscated_js y anti_bot
-            # a petición del usuario. Son demasiado comunes en webs legítimas (webpack, CF WAF)
-            # y generan falsos positivos inaceptables sin aportar valor real por sí solos.
             if osint_data.tech_data.is_obfuscated_js:
                 logger.debug(f"Ofuscación JS detectada en {extracted_hostname} - ignorado para puntaje heurístico")
 
@@ -183,38 +173,28 @@ class HeuristicScanner:
                     or ("password" in html_lower and "<form" in html_lower)
                 )
 
-                # M-3: tldextract ya importado a nivel de módulo; eliminado import duplicado y dead assignment
                 extracted = tldextract.extract(extracted_hostname)
-                scanned_domain = extracted.domain.lower()  # ej. "google"
+                scanned_domain = extracted.domain.lower()
 
                 for raw_brand in osint_data.tech_data.ocr_extracted_brands:
                     brand_clean = raw_brand.strip()
                     brand_lower = brand_clean.lower()
                     official_domain = TARGET_BRANDS.get(brand_lower, brand_clean)
 
-                    # 1️⃣  El dominio escaneado coincide exactamente con la marca
-                    #    (ej. google.com escaneando "google")
                     if scanned_domain == brand_lower:
                         continue
 
-                    # 2️⃣  El dominio escaneado es dueño legítimo de la marca detectada
-                    #    (ej. google.com mostrando "Gmail", microsoft.com mostrando "Outlook")
                     legitimate_owners = BRAND_LEGITIMATE_OWNERS.get(brand_lower, set())
                     if scanned_domain in legitimate_owners:
                         continue
 
-                    # 3️⃣  El official_domain de la marca aparece en el hostname
-                    #    (ej. m.gmail.com escaneando "gmail")
                     if official_domain and official_domain in extracted_hostname:
                         continue
 
-                    # ⚠️ Solo flagear si hay indicadores de login activos en la página.
-                    # Una marca en el logo/footer sin form de contraseña NO es suplantación.
                     if has_login_indicators:
                         base_score += 85
                         flags.append(f"VISUAL_BRAND_IMPERSONATION (Marca detectada: {brand_clean.capitalize()})")
                     else:
-                        # Indicador suave: marca presente pero sin login form
                         logger.debug(
                             f"Marca '{brand_clean}' detectada en {extracted_hostname} sin indicadores de login — no se penaliza"
                         )
@@ -228,12 +208,9 @@ class HeuristicScanner:
                     flags.append("SUSPICIOUS_SSL")
 
         if osint_data and osint_data.geolocation and osint_data.geolocation.asn:
-            # H-9: Eliminados AS14061 (DigitalOcean), AS16276 (OVH), AS20473 (Vultr) —
-            # hospedan millones de sitios legítimos y generan falsos positivos masivos.
-            # Se mantienen solo carriers chinos de estado y hosting tipo bulletproof documentados.
             suspicious_asns = ["AS4134", "AS4837", "AS5089", "AS206446"]
             if any(asn in osint_data.geolocation.asn for asn in suspicious_asns):
-                base_score += 10  # penalización reducida: solo indicador débil
+                base_score += 10
                 flags.append(f"SUSPICIOUS_ASN ({osint_data.geolocation.asn})")
 
         final_score = max(MIN_RISK_SCORE, min(base_score, MAX_RISK_SCORE))

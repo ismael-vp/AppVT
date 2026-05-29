@@ -29,16 +29,13 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# ─── Configuración ─────────────────────────────────────────────────────────────
-
 FEEDS_DB_NAME = os.getenv("FEEDS_DB_NAME", "phishing_feeds.db")
-FEEDS_REFRESH_INTERVAL = int(os.getenv("FEEDS_REFRESH_INTERVAL_SECONDS", str(60 * 60)))  # 1 hora
+FEEDS_REFRESH_INTERVAL = int(os.getenv("FEEDS_REFRESH_INTERVAL_SECONDS", str(60 * 60)))
 FEED_DOWNLOAD_TIMEOUT = float(os.getenv("FEED_DOWNLOAD_TIMEOUT", "30.0"))
 MAX_FEED_ENTRIES = int(os.getenv("MAX_FEED_ENTRIES", "500_000"))
 
 OPENPHISH_FEED_URL = "https://openphish.com/feed.txt"
 
-# ─── Modelos de datos ──────────────────────────────────────────────────────────
 
 @dataclass
 class FeedCheckResult:
@@ -47,8 +44,6 @@ class FeedCheckResult:
     source: str | None = None
     url_hash: str | None = None
 
-
-# ─── Servicio ──────────────────────────────────────────────────────────────────
 
 class FeedService:
     """
@@ -104,8 +99,6 @@ class FeedService:
             conn.commit()
         logger.info(f"✅ FeedService: base de datos inicializada en {self._db_path}")
 
-    # ─── API Pública ────────────────────────────────────────────────────────────
-
     async def initialize(self) -> None:
         """
         Descarga inicial de todos los feeds.
@@ -157,12 +150,9 @@ class FeedService:
         """Número total de entradas en la base de datos."""
         return self._total_entries
 
-    # ─── Internos ───────────────────────────────────────────────────────────────
-
     def _query_db(self, url_hash: str, domain: str, search_url: str) -> FeedCheckResult:
         """Consulta sincrónica a la base de datos (ejecutada en thread pool)."""
         with sqlite3.connect(self._db_path, timeout=5.0) as conn:
-            # 1. Búsqueda por hash exacto
             row = conn.execute(
                 "SELECT source FROM phishing_feeds WHERE url_hash = ?",
                 (url_hash,)
@@ -170,12 +160,11 @@ class FeedService:
             if row:
                 return FeedCheckResult(detected=True, source=row[0], url_hash=url_hash)
 
-            # 2. Búsqueda por dominio y coincidencia flexible (OpenPhish)
             rows = conn.execute(
                 "SELECT url, source FROM phishing_feeds WHERE domain = ?",
                 (domain,)
             ).fetchall()
-            
+
             search_norm = search_url.rstrip('/').replace("https://", "http://").lower()
             for db_url, source in rows:
                 db_norm = db_url.rstrip('/').replace("https://", "http://").lower()
@@ -198,9 +187,7 @@ class FeedService:
 
     async def _refresh_all_feeds(self) -> None:
         """Descarga y actualiza todos los feeds configurados."""
-        tasks = [
-            self._refresh_openphish(),
-        ]
+        tasks = [self._refresh_openphish()]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for i, r in enumerate(results):
             if isinstance(r, Exception):
@@ -232,8 +219,6 @@ class FeedService:
         self._last_refresh[source] = time.time()
         logger.info(f"✅ OpenPhish: {inserted} nuevas entradas insertadas ({len(urls)} procesadas).")
 
-
-
     def _bulk_insert(self, urls: list[str], source: str) -> int:
         """
         Inserta URLs en la base de datos usando INSERT OR IGNORE para idempotencia.
@@ -264,7 +249,6 @@ class FeedService:
                         batch,
                     )
                     conn.commit()
-                    # executemany.rowcount es el número real de filas insertadas
                     inserted_count += cursor.rowcount
 
                 return inserted_count

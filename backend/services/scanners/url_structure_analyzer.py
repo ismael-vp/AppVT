@@ -1,14 +1,12 @@
 import logging
-import math
 import re
-from collections import Counter
 from typing import Any
 from urllib.parse import urlparse
 
 import tldextract
 
 from services.ml_analyzer import analyze_structure_with_ml
-from services.utils import TARGET_BRANDS_DETAILED, calculate_risk_level, levenshtein_similarity
+from services.utils import ABUSED_FREE_HOSTING, TARGET_BRANDS_DETAILED, calculate_normalized_entropy, calculate_risk_level, levenshtein_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -81,32 +79,7 @@ SUSPICIOUS_KEYWORDS: list[tuple[str, int, str]] = [
     ("rechnung", 15, "Billing (DE)")
 ]
 
-ABUSED_FREE_HOSTING: list[tuple[str, int]] = [
-    ("github.io", 25),
-    ("gitlab.io", 25),
-    ("herokuapp.com", 25),
-    ("vercel.app", 25),
-    ("netlify.app", 25),
-    ("firebaseapp.com", 25),
-    ("web.app", 25),
-    ("glitch.me", 25),
-    ("repl.co", 25),
-    ("000webhostapp.com", 30),
-    ("blogspot.com", 20),
-    ("weebly.com", 20),
-    ("wixsite.com", 20),
-    ("wordpress.com", 20),
-    ("pages.dev", 25),
-    ("workers.dev", 25),
-    ("surge.sh", 25),
-    ("neocities.org", 20),
-    ("tripod.com", 20),
-    ("angelfire.com", 20),
-    ("s3.amazonaws.com", 20),
-    ("storage.googleapis.com", 20),
-    ("ipfs.io", 30),
-    ("bitbucket.io", 20),
-]
+
 
 def _validate_url(url: str) -> str:
     """Valida y normaliza una URL."""
@@ -127,22 +100,7 @@ def _validate_url(url: str) -> str:
 
     return url
 
-def _calculate_normalized_entropy(text: str) -> float:
-    """Calcula la entropía de Shannon normalizada (0.0 - 1.0)."""
-    if not text:
-        return 0.0
-    length = len(text)
-    if length <= 1:
-        return 0.0
 
-    counts = Counter(text)
-    entropy = 0.0
-    for count in counts.values():
-        p = count / length
-        entropy -= p * math.log2(p)
-
-    max_entropy = math.log2(length)
-    return entropy / max_entropy if max_entropy > 0 else 0.0
 
 def _detect_free_hosting(hostname: str) -> tuple[bool, list[str]]:
     """Detecta si el hostname usa un hosting gratuito abusado."""
@@ -200,7 +158,7 @@ def _detect_entropy_and_dga(subdomain: str) -> list[str]:
     if not subdomain or len(subdomain) < 5:
         return []
 
-    norm_entropy = _calculate_normalized_entropy(subdomain)
+    norm_entropy = calculate_normalized_entropy(subdomain.encode('utf-8'))
     has_consecutive_numbers = bool(re.search(r"\d{4,}", subdomain))
 
     if norm_entropy > ENTROPY_THRESHOLD or has_consecutive_numbers:

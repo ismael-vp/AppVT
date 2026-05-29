@@ -16,11 +16,10 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# --- Load Brands from JSON ---
+
 def _load_target_brands() -> list[tuple[str, set[str], set[str]]]:
     brands_list = []
     try:
-        # Resolves to backend/data/brands.json
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         json_path = os.path.join(base_dir, "data", "brands.json")
         with open(json_path, encoding="utf-8") as f:
@@ -145,10 +144,6 @@ DANGEROUS_EXTENSIONS: set[str] = {
     ".iso", ".img", ".dmg", ".vmdk", ".zip", ".rar", ".7z", ".tar", ".gz"
 }
 
-# ---------------------------------------------------------------------------
-# Levenshtein compartido (evita duplicación en url_structure_analyzer y
-# typosquatting_scanner que antes tenían sus propias copias).
-# ---------------------------------------------------------------------------
 
 @functools.lru_cache(maxsize=10_000)
 def levenshtein_distance(s1: str, s2: str) -> int:
@@ -179,11 +174,6 @@ def levenshtein_similarity(s1: str, s2: str) -> float:
     return 1.0 - (levenshtein_distance(s1, s2) / max_len)
 
 
-# ---------------------------------------------------------------------------
-# Nivel de riesgo compartido (evita duplicación en heuristic_scanner y
-# url_structure_analyzer).
-# ---------------------------------------------------------------------------
-
 def calculate_risk_level(score: int) -> str:
     """Convierte score numérico a nivel de riesgo textual."""
     if score >= 70:
@@ -194,10 +184,6 @@ def calculate_risk_level(score: int) -> str:
         return "MEDIUM"
     return "LOW"
 
-
-# ---------------------------------------------------------------------------
-# SSRF protection — versiones síncrona y asíncrona.
-# ---------------------------------------------------------------------------
 
 def _is_reserved_ip(ip_str: str) -> bool:
     """Retorna True si la IP es privada/reservada/loopback/etc."""
@@ -231,20 +217,17 @@ def is_safe_url(url: str) -> bool:
         if len(hostname) > 253:
             return False
 
-        # ── Comprobar IP literal ──────────────────────────────────────────
         try:
             if _is_reserved_ip(hostname):
                 return False
-            ipaddress.ip_address(hostname)  # era IP válida y pública
+            ipaddress.ip_address(hostname)
             return True
         except ValueError:
-            pass  # no era IP → seguir con resolución DNS
+            pass
 
-        # ── Resolución DNS síncrona ───────────────────────────────────────
         addr_info = socket.getaddrinfo(hostname, None)
         for _, _, _, _, sockaddr in addr_info:
             if _is_reserved_ip(sockaddr[0]):
-                # 🔒 No loggear la IP interna resuelta (fuga de info)
                 _h = hashlib.sha256(hostname.encode()).hexdigest()[:12]
                 logger.info(f"SSRF bloqueado: hostname_hash={_h}")
                 return False
@@ -273,7 +256,6 @@ async def is_safe_url_async(url: str) -> bool:
         if len(hostname) > 253:
             return False
 
-        # ── Comprobar IP literal (no necesita DNS) ────────────────────────
         try:
             if _is_reserved_ip(hostname):
                 return False
@@ -282,8 +264,6 @@ async def is_safe_url_async(url: str) -> bool:
         except ValueError:
             pass
 
-        # ── Resolución DNS no bloqueante ──────────────────────────────────
-        # H-3: get_event_loop() deprecated en Python 3.10+ — usar get_running_loop()
         loop = asyncio.get_running_loop()
         addr_info = await loop.getaddrinfo(hostname, None)
         for _, _, _, _, sockaddr in addr_info:
@@ -364,7 +344,7 @@ def calculate_file_forensics(file_bytes: bytes, filename: str) -> dict[str, Any]
         entropy_alerts.append("ENTROPIA_ELEVADA: Posible ofuscación")
 
     return {
-        "md5": hashlib.md5(file_bytes).hexdigest(),  # noqa: S324 — usado para fingerprinting, no seguridad
+        "md5": hashlib.md5(file_bytes).hexdigest(),  # noqa: S324
         "sha256": hashlib.sha256(file_bytes).hexdigest(),
         "file_size": format_size(file_size),
         "file_type": mime_type,
@@ -429,4 +409,3 @@ async def resolve_redirect_chain(url: str, timeout: float = 8.0, max_redirects: 
         redirect_chain = [url]
 
     return redirect_chain
-

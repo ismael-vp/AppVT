@@ -7,8 +7,6 @@ ai_service.py e image_phishing_service.py.
 
 import re
 
-# Patrones de prompt injection — compilados a nivel de módulo una única vez.
-# Usados por AIService y ImagePhishingService para sanitizar entradas de usuario.
 PROMPT_INJECTION_PATTERNS: list[re.Pattern] = [
     re.compile(r"ignore\s+(all\s+)?(previous\s+)?instructions?", re.I),
     re.compile(r"ignore\s+(the\s+)?system\s+prompt", re.I),

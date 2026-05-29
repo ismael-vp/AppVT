@@ -1,3 +1,4 @@
+"""Escáner de geolocalización y reputación IP."""
 import asyncio
 import ipaddress
 import logging

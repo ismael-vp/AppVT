@@ -1,7 +1,8 @@
-import math
 from urllib.parse import urlparse
 
 import Levenshtein
+
+from services.utils import calculate_shannon_entropy
 
 # Marcas objetivo (amplía según necesites)
 BRANDS = [
@@ -18,13 +19,6 @@ HIGH_RISK_TLDS = {
     "bid": 0.5, "trade": 0.5, "webcam": 0.5, "party": 0.5, "stream": 0.5
 }
 
-def calculate_shannon_entropy(url):
-    """Calcula la entropía de Shannon de la cadena."""
-    if not url:
-        return 0
-    prob = [float(url.count(c)) / len(url) for c in set(url)]
-    entropy = -sum([p * math.log(p) / math.log(2.0) for p in prob])
-    return entropy
 
 def extract_advanced_features(url: str) -> list:
     """
@@ -48,7 +42,7 @@ def extract_advanced_features(url: str) -> list:
         dots_count = domain.count('.')
         hyphens_count = domain.count('-')
         has_numbers = int(any(c.isdigit() for c in url))
-        entropy = calculate_shannon_entropy(url)
+        entropy = calculate_shannon_entropy(url.encode('utf-8'))
         has_keywords = int(any(kw in full_url for kw in [
             "login", "signin", "verify", "secure", "account", "update", "confirm"
         ]))

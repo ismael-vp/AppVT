@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import re
 import socket
 from urllib.parse import quote, urlparse
 
@@ -31,19 +30,8 @@ async def _null_coro():
 class OSINTService:
 
     @staticmethod
-    def _extract_title_fast(html_content: str) -> str:
-        """Extrae el título usando Regex."""
-        if not html_content:
-            return ""
-        match = re.search(r'<title[^>]*>(.*?)</title>', html_content, re.IGNORECASE | re.DOTALL)
-        if match:
-            return match.group(1).strip().lower()
-        return ""
-
-    @staticmethod
     async def get_osint_data(url: str) -> OSINTResponse:
         parsed_url = urlparse(url)
-        # parsed_url.hostname strip el puerto (ej. example.com:8080 → example.com)
         hostname = parsed_url.hostname or (parsed_url.path.split('/')[0].split(':')[0])
 
         if not hostname:
@@ -51,21 +39,18 @@ class OSINTService:
 
         osint_data = OSINTResponse()
 
-        # Resolucion DNS y Geo
+        # Resolución DNS y Geo
         try:
             ip_address = await asyncio.wait_for(asyncio.to_thread(socket.gethostbyname, hostname), timeout=3.0)
         except Exception as e:
             logger.warning(f"Fallo de resolución DNS para {hostname}: {e}")
             ip_address = None
 
-        # Timeouts granulares (en segundos)
-        # Nota: En Hugging Face Free el stack de red es más lento que en local.
-        # SSL y WHOIS (vía RDAP) necesitan más tiempo para completarse.
         T_GEO = 4.0
-        T_WHOIS = 15.0  # RDAP (8s) + fallback python-whois (8s) + margen
-        T_SSL = 12.0    # Conexión SSL desde datacenter de HF puede tardar 8-10s
+        T_WHOIS = 15.0
+        T_SSL = 12.0
         T_DNS = 5.0
-        T_TECH = 20.0   # YouTube y sitios grandes pueden ser lentos para descargar
+        T_TECH = 20.0
 
         async def _safe_call(coro, timeout: float):
             try:
@@ -77,7 +62,6 @@ class OSINTService:
                 logger.error(f"Error en scanner: {e}")
                 return None
 
-        # Fix: Orquestación resiliente sin matar todo el bloque si uno falla
         safe_url = url if url.startswith(('http://', 'https://')) else f"https://{url}"
         encoded_url = quote(safe_url)
         ua_desktop = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36"
@@ -119,7 +103,6 @@ class OSINTService:
             return_exceptions=True
         )
 
-        # Tratar Excepciones no capturadas por _safe_call (que no deberían ocurrir)
         processed_results = []
         for r in results:
             if isinstance(r, Exception):
@@ -130,7 +113,6 @@ class OSINTService:
 
         geo_data, whois_data, ssl_data, dns_data, tech_data, microlink_data = processed_results
 
-        # _safe_call absorbe excepciones; sólo comprobamos None (timeout/error)
         if geo_data:
             osint_data.geolocation = geo_data.geolocation
             osint_data.abuse_confidence_score = geo_data.abuse_confidence_score
@@ -174,15 +156,13 @@ class OSINTService:
                 form_data = await FormScanner.analyze_forms(
                     osint_data.tech_data.html_content,
                     hostname,
-                    osint_data.url_anatomy  # UrlAnatomyData — tiene suspicious_tld, is_dga_suspect, etc.
+                    osint_data.url_anatomy
                 )
                 if form_data:
                     osint_data.form_analysis = form_data
         except Exception as e:
             logger.error(f"Error en Heuristic Facade: {e}")
 
-        # ── TIER 0: Feed Local (OpenPhish) ──────────────────────────
-        # Reutiliza el singleton — NO instancia nuevo FeedService por petición
         try:
             feed_result = await FeedService().check_url(url)
             if feed_result.detected:
@@ -192,9 +172,6 @@ class OSINTService:
         except Exception as exc:
             logger.warning(f"FeedService check_url error: {exc}")
 
-        # ── TIER 1: Google Safe Browsing ────────────────────────────────────────
-        # Solo consultamos GSB si la URL no fue ya marcada como maliciosa en Tier 0,
-        # para conservar la cuota gratuita de 10k/día.
         dns_blacklisted = (
             osint_data.dns is not None
             and (osint_data.dns.spamhaus_listed or osint_data.dns.surbl_listed)
@@ -217,22 +194,19 @@ class OSINTService:
             logger.debug(
                 f"GSB omitida para {url}: ya detectada en {'feeds' if osint_data.feed_detected else 'DNS blacklist'}"
             )
-        # === Machine Learning Integration ===
+
         ml_results = await asyncio.to_thread(analyze_osint_with_ml, url, osint_data)
         if ml_results["ml_score"] >= 50 and osint_data.heuristic_result:
             ml_score = ml_results["ml_score"]
             current_risk = osint_data.heuristic_result.risk_score
             new_risk = max(current_risk, ml_score) + (ml_score * 0.2 if current_risk > 30 else 0)
             osint_data.heuristic_result.risk_score = min(100, int(new_risk))
-
             osint_data.heuristic_result.level = calculate_risk_level(osint_data.heuristic_result.risk_score)
 
             if ml_results["flags"]:
                 osint_data.heuristic_result.flags.extend(ml_results["flags"])
 
-        # Limpiar el HTML antes de enviarlo al frontend
         if osint_data.tech_data:
             osint_data.tech_data.html_content = ""
 
         return osint_data
-
