@@ -18,7 +18,7 @@ openai>=2.38.0
 
 # --- Utilidades ---
 python-dotenv>=1.2.2
-redis>=7.4.0
+redis>=8.0.1
 
 # --- OCR y Procesamiento de Imágenes ---
 pytesseract>=0.3.13
